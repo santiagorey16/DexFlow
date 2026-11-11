@@ -1,6 +1,7 @@
 package com.santiagorey.devflow.auth
 
 import android.app.Activity
+import com.google.android.gms.tasks.Task
 import com.google.firebase.auth.AuthResult
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
@@ -40,24 +41,60 @@ class AuthRepository(
     }
 
     fun loginWithGitHub(activity: Activity, onResult: (Result<AuthResult>) -> Unit) {
-        val provider = OAuthProvider.newBuilder("github.com").apply {
-            scopes = listOf("user:email")
-        }
-
-        // Check if there is a pending auth result
+        // Si el flujo web quedó pendiente (la actividad se recreó), se retoma.
         val pendingResultTask = auth.pendingAuthResult
-        if (pendingResultTask != null) {
-            pendingResultTask
-                .addOnSuccessListener { result -> onResult(Result.success(result)) }
-                .addOnFailureListener { exception -> onResult(Result.failure(exception)) }
-        } else {
-            auth.startActivityForSignInWithProvider(activity, provider.build())
-                .addOnSuccessListener { result -> onResult(Result.success(result)) }
-                .addOnFailureListener { exception -> onResult(Result.failure(exception)) }
-        }
+        val task = pendingResultTask
+            ?: auth.startActivityForSignInWithProvider(activity, gitHubProvider())
+        task.deliverTo(onResult)
+    }
+
+    // =====================================================
+    // VINCULAR CUENTAS (Ajustes → Integraciones)
+    // =====================================================
+
+    fun linkGitHub(activity: Activity, onResult: (Result<AuthResult>) -> Unit) {
+        val user = auth.currentUser
+            ?: return onResult(Result.failure(IllegalStateException("No hay sesión activa")))
+        val task = auth.pendingAuthResult
+            ?: user.startActivityForLinkWithProvider(activity, gitHubProvider())
+        task.deliverTo(onResult)
+    }
+
+    suspend fun linkGoogle(idToken: String): AuthResult {
+        val user = auth.currentUser ?: throw IllegalStateException("No hay sesión activa")
+        val credential = GoogleAuthProvider.getCredential(idToken, null)
+        return user.linkWithCredential(credential).await()
+    }
+
+    suspend fun unlink(providerId: String): FirebaseUser? {
+        val user = auth.currentUser ?: return null
+        return user.unlink(providerId).await().user
+    }
+
+    suspend fun reloadUser(): FirebaseUser? {
+        auth.currentUser?.reload()?.await()
+        return auth.currentUser
     }
 
     fun logout() {
         auth.signOut()
     }
+
+    private fun gitHubProvider() =
+        OAuthProvider.newBuilder("github.com").apply {
+            scopes = listOf("user:email", "read:user")
+        }.build()
+
+    private fun Task<AuthResult>.deliverTo(onResult: (Result<AuthResult>) -> Unit) {
+        addOnSuccessListener { result -> onResult(Result.success(result)) }
+        addOnFailureListener { exception -> onResult(Result.failure(exception)) }
+    }
 }
+
+/** Proveedores reales vinculados al usuario (sin la entrada interna "firebase"). */
+fun FirebaseUser?.linkedProviderIds(): Set<String> =
+    this?.providerData
+        ?.map { it.providerId }
+        ?.filter { it != "firebase" }
+        ?.toSet()
+        ?: emptySet()

@@ -1,49 +1,85 @@
 package com.santiagorey.devflow.auth
 
 import android.app.Activity
+import android.app.Application
+import android.content.Context
 import android.util.Log
 import android.util.Patterns
-import androidx.lifecycle.ViewModel
+import androidx.core.content.edit
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.auth.AuthResult
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
+import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-class AuthViewModel(
-    private val repository: AuthRepository = AuthRepository()
-) : ViewModel() {
+const val PROVIDER_GITHUB = "github.com"
+const val PROVIDER_GOOGLE = "google.com"
 
-    private val _uiState = MutableStateFlow(
-        AuthUiState(
-            isAuthenticated = repository.currentUser != null,
-            currentUser = repository.currentUser
-        )
-    )
+class AuthViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val repository = AuthRepository()
+
+    private val prefs = application.getSharedPreferences("devflow_auth", Context.MODE_PRIVATE)
+
+    private val _uiState = MutableStateFlow(initialState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
     private val authStateListener = FirebaseAuth.AuthStateListener { firebaseAuth ->
         val user = firebaseAuth.currentUser
         _uiState.update {
             it.copy(
-                isAuthenticated = user != null,
-                currentUser = user
+                isAuthenticated = user != null || it.isTempSession,
+                currentUser = user,
+                providerIds = user.linkedProviderIds(),
+                githubUsername = user?.let { u -> storedGithubUsername(u.uid) }
             )
         }
     }
 
     init {
         FirebaseAuth.getInstance().addAuthStateListener(authStateListener)
+        // Refresca los proveedores vinculados por si cambiaron en otro dispositivo.
+        if (repository.currentUser != null) {
+            viewModelScope.launch {
+                runCatching { repository.reloadUser() }.onSuccess { refreshUser(it) }
+            }
+        }
     }
 
     override fun onCleared() {
         super.onCleared()
         FirebaseAuth.getInstance().removeAuthStateListener(authStateListener)
+    }
+
+    private fun initialState(): AuthUiState {
+        val user = repository.currentUser
+        val tempSession = user == null && prefs.getBoolean(KEY_TEMP_SESSION, false)
+        return AuthUiState(
+            isAuthenticated = user != null || tempSession,
+            currentUser = user,
+            providerIds = user.linkedProviderIds(),
+            githubUsername = user?.let { storedGithubUsername(it.uid) },
+            isTempSession = tempSession
+        )
+    }
+
+    // =====================================================
+    // INICIO DE SESIÓN
+    // =====================================================
+
+    /** Sesión local de desarrollo (credenciales temporales). Se conserva al reiniciar la app. */
+    fun loginTemp() {
+        prefs.edit { putBoolean(KEY_TEMP_SESSION, true) }
+        _uiState.update { it.copy(isTempSession = true, isAuthenticated = true) }
     }
 
     fun loginWithEmail(email: String, password: String) {
@@ -56,27 +92,15 @@ class AuthViewModel(
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
                 val result = repository.loginWithEmail(email, password)
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        isAuthenticated = true,
-                        currentUser = result.user,
-                        errorMessage = null
-                    )
-                }
+                onSignedIn(result)
             } catch (e: Exception) {
-                Log.e("AuthViewModel", "Error in loginWithEmail", e)
+                Log.e(TAG, "Error in loginWithEmail", e)
                 val userFriendlyMessage = when (e) {
                     is FirebaseAuthInvalidUserException,
                     is FirebaseAuthInvalidCredentialsException -> "Correo o contraseña incorrectos."
                     else -> "Revisa tu conexión e inténtalo nuevamente."
                 }
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = userFriendlyMessage
-                    )
-                }
+                _uiState.update { it.copy(isLoading = false, errorMessage = userFriendlyMessage) }
             }
         }
     }
@@ -103,27 +127,15 @@ class AuthViewModel(
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
                 val result = repository.registerWithEmail(name, email, password)
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        isAuthenticated = true,
-                        currentUser = result.user,
-                        errorMessage = null
-                    )
-                }
+                onSignedIn(result)
             } catch (e: Exception) {
-                Log.e("AuthViewModel", "Error in registerWithEmail", e)
+                Log.e(TAG, "Error in registerWithEmail", e)
                 val userFriendlyMessage = when (e) {
                     is FirebaseAuthUserCollisionException -> "Ya existe una cuenta con este correo."
                     is FirebaseAuthInvalidCredentialsException -> "El formato del correo electrónico no es válido."
                     else -> "Revisa tu conexión e inténtalo nuevamente."
                 }
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = userFriendlyMessage
-                    )
-                }
+                _uiState.update { it.copy(isLoading = false, errorMessage = userFriendlyMessage) }
             }
         }
     }
@@ -146,7 +158,7 @@ class AuthViewModel(
                     )
                 }
             } catch (e: Exception) {
-                Log.e("AuthViewModel", "Error in sendPasswordReset", e)
+                Log.e(TAG, "Error in sendPasswordReset", e)
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -162,21 +174,11 @@ class AuthViewModel(
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
                 val result = repository.loginWithGoogle(idToken)
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        isAuthenticated = true,
-                        currentUser = result.user,
-                        errorMessage = null
-                    )
-                }
+                onSignedIn(result)
             } catch (e: Exception) {
-                Log.e("AuthViewModel", "Error in loginWithGoogle", e)
+                Log.e(TAG, "Error in loginWithGoogle", e)
                 _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = "No se pudo iniciar sesión con Google."
-                    )
+                    it.copy(isLoading = false, errorMessage = friendlyProviderError(e, "Google"))
                 }
             }
         }
@@ -186,42 +188,189 @@ class AuthViewModel(
         _uiState.update { it.copy(isLoading = true, errorMessage = null) }
         repository.loginWithGitHub(activity) { result ->
             result.fold(
-                onSuccess = { authResult ->
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            isAuthenticated = true,
-                            currentUser = authResult.user,
-                            errorMessage = null
-                        )
-                    }
-                },
+                onSuccess = { authResult -> onSignedIn(authResult) },
                 onFailure = { e ->
-                    Log.e("AuthViewModel", "Error in loginWithGitHub", e)
+                    Log.e(TAG, "Error in loginWithGitHub", e)
                     _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            errorMessage = "No se pudo iniciar sesión con GitHub."
-                        )
+                        it.copy(isLoading = false, errorMessage = friendlyProviderError(e, "GitHub"))
                     }
                 }
             )
         }
     }
 
-    fun logout() {
-        repository.logout()
-        _uiState.update {
-            AuthUiState(
-                isAuthenticated = false,
-                currentUser = null
+    // =====================================================
+    // INTEGRACIONES (vincular / desvincular)
+    // =====================================================
+
+    fun linkGitHub(activity: Activity) {
+        if (!canLink()) return
+        _uiState.update { it.copy(linkingProvider = PROVIDER_GITHUB, errorMessage = null) }
+        repository.linkGitHub(activity) { result ->
+            result.fold(
+                onSuccess = { authResult ->
+                    rememberGithubUsername(authResult)
+                    refreshUser(authResult.user)
+                    _uiState.update {
+                        it.copy(linkingProvider = null, successMessage = "GitHub conectado correctamente.")
+                    }
+                },
+                onFailure = { e ->
+                    Log.e(TAG, "Error in linkGitHub", e)
+                    _uiState.update {
+                        it.copy(linkingProvider = null, errorMessage = friendlyLinkError(e, "GitHub"))
+                    }
+                }
             )
         }
     }
 
-    fun clearMessages() {
-        _uiState.update {
-            it.copy(errorMessage = null, successMessage = null)
+    fun linkGoogle(idToken: String) {
+        if (!canLink()) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(linkingProvider = PROVIDER_GOOGLE, errorMessage = null) }
+            try {
+                val result = repository.linkGoogle(idToken)
+                refreshUser(result.user)
+                _uiState.update {
+                    it.copy(linkingProvider = null, successMessage = "Google conectado correctamente.")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in linkGoogle", e)
+                _uiState.update {
+                    it.copy(linkingProvider = null, errorMessage = friendlyLinkError(e, "Google"))
+                }
+            }
         }
+    }
+
+    fun unlinkProvider(providerId: String) {
+        val state = _uiState.value
+        if (state.providerIds.size <= 1) {
+            _uiState.update {
+                it.copy(errorMessage = "No puedes desconectar tu único método de inicio de sesión.")
+            }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(linkingProvider = providerId) }
+            try {
+                val user = repository.unlink(providerId)
+                if (providerId == PROVIDER_GITHUB) {
+                    user?.uid?.let { uid -> prefs.edit { remove(githubKey(uid)) } }
+                }
+                refreshUser(user)
+                _uiState.update { it.copy(linkingProvider = null, successMessage = "Integración desconectada.") }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in unlinkProvider", e)
+                _uiState.update {
+                    it.copy(linkingProvider = null, errorMessage = "No se pudo desconectar. Inténtalo de nuevo.")
+                }
+            }
+        }
+    }
+
+    fun logout() {
+        repository.logout()
+        prefs.edit { putBoolean(KEY_TEMP_SESSION, false) }
+        _uiState.update { AuthUiState(isAuthenticated = false, currentUser = null) }
+    }
+
+    fun clearMessages() {
+        _uiState.update { it.copy(errorMessage = null, successMessage = null) }
+    }
+
+    fun showError(message: String) {
+        _uiState.update { it.copy(errorMessage = message) }
+    }
+
+    // =====================================================
+    // HELPERS
+    // =====================================================
+
+    private fun onSignedIn(result: AuthResult) {
+        rememberGithubUsername(result)
+        prefs.edit { putBoolean(KEY_TEMP_SESSION, false) }
+        val user = result.user
+        _uiState.update {
+            it.copy(
+                isLoading = false,
+                isAuthenticated = true,
+                isTempSession = false,
+                currentUser = user,
+                providerIds = user.linkedProviderIds(),
+                githubUsername = user?.let { u -> storedGithubUsername(u.uid) },
+                errorMessage = null
+            )
+        }
+    }
+
+    private fun refreshUser(user: FirebaseUser?) {
+        val current = user ?: repository.currentUser
+        _uiState.update {
+            it.copy(
+                currentUser = current,
+                providerIds = current.linkedProviderIds(),
+                githubUsername = current?.let { u -> storedGithubUsername(u.uid) }
+            )
+        }
+    }
+
+    private fun canLink(): Boolean {
+        if (repository.currentUser == null) {
+            _uiState.update {
+                it.copy(errorMessage = "Inicia sesión con una cuenta real (no la temporal) para conectar integraciones.")
+            }
+            return false
+        }
+        return true
+    }
+
+    private fun rememberGithubUsername(result: AuthResult) {
+        val info = result.additionalUserInfo ?: return
+        if (info.providerId != PROVIDER_GITHUB) return
+        val username = info.username ?: return
+        val uid = result.user?.uid ?: return
+        prefs.edit { putString(githubKey(uid), username) }
+    }
+
+    private fun storedGithubUsername(uid: String): String? = prefs.getString(githubKey(uid), null)
+
+    private fun githubKey(uid: String) = "github_username_$uid"
+
+    private fun friendlyProviderError(e: Throwable, provider: String): String =
+        when {
+            e is FirebaseAuthUserCollisionException ->
+                "Ya existe una cuenta con ese correo. Entra con tu método original y conecta $provider desde Ajustes."
+            e is FirebaseAuthException && e.errorCode == "ERROR_OPERATION_NOT_ALLOWED" ->
+                "El inicio de sesión con $provider no está habilitado en Firebase."
+            e is FirebaseAuthException && e.errorCode == "ERROR_WEB_CONTEXT_CANCELED" ->
+                "Inicio de sesión con $provider cancelado."
+            else -> "No se pudo iniciar sesión con $provider: ${errorDetail(e)}"
+        }
+
+    private fun friendlyLinkError(e: Throwable, provider: String): String =
+        when {
+            e is FirebaseAuthUserCollisionException ->
+                "Esa cuenta de $provider ya está vinculada a otro usuario de DevFlow."
+            e is FirebaseAuthException && e.errorCode == "ERROR_PROVIDER_ALREADY_LINKED" ->
+                "$provider ya estaba conectado a tu cuenta."
+            e is FirebaseAuthException && e.errorCode == "ERROR_OPERATION_NOT_ALLOWED" ->
+                "La conexión con $provider no está habilitada en Firebase."
+            e is FirebaseAuthException && e.errorCode == "ERROR_WEB_CONTEXT_CANCELED" ->
+                "Conexión con $provider cancelada."
+            else -> "No se pudo conectar con $provider: ${errorDetail(e)}"
+        }
+
+    /** Código y mensaje reales del error, para poder diagnosticar fallos poco comunes. */
+    private fun errorDetail(e: Throwable): String {
+        val code = (e as? FirebaseAuthException)?.errorCode
+        val message = e.localizedMessage ?: e.javaClass.simpleName
+        return if (code != null) "$code — $message" else message
+    }
+
+    private companion object {
+        const val TAG = "AuthViewModel"
+        const val KEY_TEMP_SESSION = "temp_session"
     }
 }

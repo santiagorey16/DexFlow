@@ -1,6 +1,7 @@
 package com.santiagorey.devflow.screens
 
 import android.content.Context
+import androidx.compose.foundation.Image
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
@@ -53,6 +54,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -69,13 +71,22 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import androidx.credentials.exceptions.NoCredentialException
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.santiagorey.devflow.R
 import com.santiagorey.devflow.ui.theme.DevFlowTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
+
+// Inicio de sesión temporal (solo para desarrollo)
+const val TEMP_LOGIN_EMAIL = "Santiago@gmail.com"
+const val TEMP_LOGIN_PASSWORD = "12345678"
+
+fun isTempLogin(email: String, password: String): Boolean =
+    email.trim().equals(TEMP_LOGIN_EMAIL, ignoreCase = true) &&
+        password == TEMP_LOGIN_PASSWORD
 
 @Composable
 fun StatefulLoginScreen(
@@ -90,12 +101,13 @@ fun StatefulLoginScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
+    // TODO: Quitar credenciales temporales precargadas
     var email by remember {
-        mutableStateOf("")
+        mutableStateOf(TEMP_LOGIN_EMAIL)
     }
 
     var password by remember {
-        mutableStateOf("")
+        mutableStateOf(TEMP_LOGIN_PASSWORD)
     }
 
     var passwordVisible by remember {
@@ -176,6 +188,14 @@ fun StatefulLoginScreen(
 }
 
 
+/**
+ * Abre el selector de cuentas de Google y devuelve el ID token para Firebase.
+ *
+ * Requisitos en Firebase Console:
+ *  1. Authentication → Sign-in method → habilitar "Google".
+ *  2. Configuración del proyecto → agregar la huella SHA-1 de la app.
+ *  3. Volver a descargar google-services.json (debe incluir "oauth_client").
+ */
 fun launchGoogleSignIn(
     context: Context,
     coroutineScope: CoroutineScope,
@@ -186,6 +206,7 @@ fun launchGoogleSignIn(
     val credentialManager =
         CredentialManager.create(context)
 
+    // Generado por el plugin google-services a partir de google-services.json
     val webClientIdRes =
         context.resources.getIdentifier(
             "default_web_client_id",
@@ -194,97 +215,54 @@ fun launchGoogleSignIn(
         )
 
     val webClientId =
-        if (webClientIdRes != 0) {
-
-            context.getString(
-                webClientIdRes
-            )
-
-        } else {
-
-            ""
-        }
+        if (webClientIdRes != 0) context.getString(webClientIdRes) else ""
 
     if (webClientId.isBlank()) {
-
         onError(
-            "Para activar Google Sign-In, descarga e instala google-services.json desde Firebase en app/"
+            "Google Sign-In no está configurado: habilita Google en Firebase, agrega tu SHA-1 y vuelve a descargar google-services.json."
         )
-
         return
     }
 
-    val googleIdOption =
-        GetGoogleIdOption.Builder()
-            .setFilterByAuthorizedAccounts(false)
-            .setServerClientId(webClientId)
-            .setAutoSelectEnabled(false)
+    // "Sign in with Google": siempre muestra el selector de cuentas del dispositivo.
+    val signInWithGoogleOption =
+        GetSignInWithGoogleOption.Builder(webClientId)
             .build()
 
     val request =
         GetCredentialRequest.Builder()
-            .addCredentialOption(
-                googleIdOption
-            )
+            .addCredentialOption(signInWithGoogleOption)
             .build()
 
     coroutineScope.launch {
-
         try {
-
             val result =
                 credentialManager.getCredential(
                     request = request,
                     context = context
                 )
 
-            val credential =
-                result.credential
+            val credential = result.credential
 
             if (
                 credential is CustomCredential &&
-                credential.type ==
-                GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+                credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
             ) {
-
                 val googleIdTokenCredential =
-                    GoogleIdTokenCredential.createFrom(
-                        credential.data
-                    )
-
-                onSuccess(
-                    googleIdTokenCredential.idToken
-                )
-
+                    GoogleIdTokenCredential.createFrom(credential.data)
+                onSuccess(googleIdTokenCredential.idToken)
             } else {
-
-                onError(
-                    "Respuesta no válida de Google Sign-In."
-                )
+                onError("Respuesta no válida de Google Sign-In.")
             }
 
-        } catch (
-            e: GetCredentialCancellationException
-        ) {
-
-            Log.i(
-                "GoogleSignIn",
-                "Cancelado por el usuario"
-            )
-
-        } catch (
-            e: Exception
-        ) {
-
-            Log.e(
-                "GoogleSignIn",
-                "Error en Google Sign-In",
-                e
-            )
-
-            onError(
-                "No se pudo iniciar sesión con Google."
-            )
+        } catch (e: GetCredentialCancellationException) {
+            Log.i("GoogleSignIn", "Cancelado por el usuario")
+        } catch (e: NoCredentialException) {
+            Log.e("GoogleSignIn", "Sin cuentas disponibles", e)
+            onError("No hay cuentas de Google en este dispositivo. Agrega una en Ajustes del teléfono.")
+        } catch (e: Exception) {
+            Log.e("GoogleSignIn", "Error en Google Sign-In", e)
+            onError("No se pudo iniciar sesión con Google.")
         }
     }
 }
@@ -349,27 +327,18 @@ fun LoginScreen(
                 Alignment.CenterHorizontally
         ) {
 
-            Box(
+            Image(
+                painter = painterResource(
+                    id = R.drawable.devflow_logo
+                ),
+                contentDescription = "Logo de DevFlow",
+                contentScale = ContentScale.Fit,
                 modifier = Modifier
-                    .size(72.dp)
+                    .size(82.dp)
                     .clip(
                         RoundedCornerShape(18.dp)
                     )
-                    .background(
-                        Color(0xFF635BFF)
-                    ),
-
-                contentAlignment =
-                    Alignment.Center
-            ) {
-
-                Text(
-                    text = "</>",
-                    color = Color.White,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            )
 
             Spacer(
                 modifier =
