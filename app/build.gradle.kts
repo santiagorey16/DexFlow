@@ -28,8 +28,9 @@ android {
 
     buildTypes {
         release {
+            // R8: reduce y ofusca el código del APK de release.
             optimization {
-                enable = false
+                enable = true
             }
         }
     }
@@ -118,6 +119,10 @@ dependencies {
         libs.firebase.auth
     )
 
+    implementation(
+        libs.firebase.firestore
+    )
+
 
     // =====================================================
     // GOOGLE SIGN-IN
@@ -148,11 +153,35 @@ dependencies {
 
 
     // =====================================================
+    // IA: CLAUDE (SDK OFICIAL DE ANTHROPIC)
+    // =====================================================
+
+    implementation(
+        libs.anthropic.java
+    )
+
+    // Recordatorios push en segundo plano
+    implementation(
+        libs.androidx.work.runtime
+    )
+
+    // Pantalla de inicio con el logo
+    implementation(
+        libs.androidx.core.splashscreen
+    )
+
+
+    // =====================================================
     // TESTING
     // =====================================================
 
     testImplementation(
         libs.junit
+    )
+
+    // org.json real: el de Android viene vacío en los tests locales
+    testImplementation(
+        libs.org.json
     )
 
     androidTestImplementation(

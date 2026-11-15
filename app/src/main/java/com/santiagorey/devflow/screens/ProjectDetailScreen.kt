@@ -35,7 +35,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Scaffold
@@ -78,7 +77,10 @@ import java.time.ZoneOffset
 private val stackOptions = listOf("Frontend Web", "API / Backend", "Base de Datos", "App Móvil")
 
 /**
- * Asistente "Nuevo Proyecto" (Paso 1 a 5). Todos los campos empiezan vacíos.
+ * Asistente de proyecto (Paso 1 a 5).
+ *
+ * - Sin [project]: "Nuevo Proyecto", todos los campos empiezan vacíos.
+ * - Con [project]: "Editar Proyecto", los campos vienen llenos y se conserva el avance.
  *
  * @param preselectedClientId cliente ya elegido (cuando se llega desde la ficha de un cliente).
  */
@@ -86,22 +88,25 @@ private val stackOptions = listOf("Frontend Web", "API / Backend", "Base de Dato
 @Composable
 fun ProjectDetailScreen(
     clients: List<Client> = emptyList(),
+    project: Project? = null,
     preselectedClientId: String? = null,
     newlyCreatedClientId: String? = null,
     onBackClick: () -> Unit = {},
     onAddClientClick: () -> Unit = {},
-    onCreateProject: (Project) -> Unit = {}
+    onCreateProject: (Project) -> Unit = {},
+    onSaveProject: (Project) -> Unit = {}
 ) {
     val context = LocalContext.current
+    val isEditing = project != null
 
-    // Form states (vacíos por defecto)
-    var projectName by rememberSaveable { mutableStateOf("") }
-    var projectDescription by rememberSaveable { mutableStateOf("") }
-    var selectedClientId by rememberSaveable { mutableStateOf(preselectedClientId) }
-    var selectedStartingPoint by rememberSaveable { mutableIntStateOf(0) } // 0: Análisis, 1: Diseño, 2: Código
-    var selectedStack by rememberSaveable { mutableStateOf(listOf<String>()) }
-    var deliveryDateMillis by rememberSaveable { mutableStateOf<Long?>(null) }
-    var budget by rememberSaveable { mutableStateOf("") }
+    // Form states (vacíos al crear, con los datos del proyecto al editar)
+    var projectName by rememberSaveable { mutableStateOf(project?.name.orEmpty()) }
+    var projectDescription by rememberSaveable { mutableStateOf(project?.description.orEmpty()) }
+    var selectedClientId by rememberSaveable { mutableStateOf(project?.clientId ?: preselectedClientId) }
+    var selectedStartingPoint by rememberSaveable { mutableIntStateOf(project?.startingPoint ?: 0) } // 0: Análisis, 1: Diseño, 2: Código
+    var selectedStack by rememberSaveable { mutableStateOf(project?.stack ?: listOf()) }
+    var deliveryDateMillis by rememberSaveable { mutableStateOf(project?.deliveryDateMillis) }
+    var budget by rememberSaveable { mutableStateOf(project?.budget.orEmpty()) }
 
     var showDatePicker by remember { mutableStateOf(false) }
     var clientMenuOpen by remember { mutableStateOf(false) }
@@ -125,7 +130,7 @@ fun ProjectDetailScreen(
     Scaffold(
         containerColor = DevFlowColors.Background,
         topBar = {
-            BackTopBar(title = "Nuevo Proyecto", onBackClick = onBackClick)
+            BackTopBar(title = if (isEditing) "Editar Proyecto" else "Nuevo Proyecto", onBackClick = onBackClick)
         }
     ) { padding ->
         Column(
@@ -143,7 +148,7 @@ fun ProjectDetailScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "CONFIGURACIÓN ASISTIDA",
+                    text = if (isEditing) "EDITANDO PROYECTO" else "CONFIGURACIÓN ASISTIDA",
                     style = TextStyle(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = DevFlowColors.Cyan)
                 )
                 Text(
@@ -176,7 +181,7 @@ fun ProjectDetailScreen(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     placeholder = { Text("Ej. App de reservas", color = DevFlowColors.TextDark, fontSize = 13.sp) },
-                    colors = wizardFieldColors(),
+                    colors = devFlowTextFieldColors(filled = true),
                     shape = RoundedCornerShape(10.dp)
                 )
 
@@ -190,7 +195,7 @@ fun ProjectDetailScreen(
                     minLines = 2,
                     maxLines = 4,
                     placeholder = { Text("¿Qué se va a construir?", color = DevFlowColors.TextDark, fontSize = 13.sp) },
-                    colors = wizardFieldColors(),
+                    colors = devFlowTextFieldColors(filled = true),
                     shape = RoundedCornerShape(10.dp)
                 )
             }
@@ -341,7 +346,7 @@ fun ProjectDetailScreen(
                     singleLine = true,
                     placeholder = { Text("0", color = DevFlowColors.TextDark, fontSize = 13.sp) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    colors = wizardFieldColors(),
+                    colors = devFlowTextFieldColors(filled = true),
                     shape = RoundedCornerShape(10.dp)
                 )
             }
@@ -353,18 +358,33 @@ fun ProjectDetailScreen(
                         Toast.makeText(context, "El nombre del proyecto es obligatorio.", Toast.LENGTH_SHORT).show()
                         return@Button
                     }
-                    val project = Project(
-                        name = projectName.trim(),
-                        description = projectDescription.trim(),
-                        clientId = selectedClientId,
-                        startingPoint = selectedStartingPoint,
-                        stack = selectedStack,
-                        deliveryDateMillis = deliveryDateMillis,
-                        budget = budget.trim(),
-                        progress = initialProgressFor(selectedStartingPoint)
-                    )
-                    onCreateProject(project)
-                    Toast.makeText(context, "¡Proyecto '${project.name}' creado!", Toast.LENGTH_SHORT).show()
+                    if (project != null) {
+                        // Edición: se conservan id, avance y fecha de creación.
+                        val updated = project.copy(
+                            name = projectName.trim(),
+                            description = projectDescription.trim(),
+                            clientId = selectedClientId,
+                            startingPoint = selectedStartingPoint,
+                            stack = selectedStack,
+                            deliveryDateMillis = deliveryDateMillis,
+                            budget = budget.trim()
+                        )
+                        onSaveProject(updated)
+                        Toast.makeText(context, "Cambios guardados en '${updated.name}'.", Toast.LENGTH_SHORT).show()
+                    } else {
+                        val newProject = Project(
+                            name = projectName.trim(),
+                            description = projectDescription.trim(),
+                            clientId = selectedClientId,
+                            startingPoint = selectedStartingPoint,
+                            stack = selectedStack,
+                            deliveryDateMillis = deliveryDateMillis,
+                            budget = budget.trim(),
+                            progress = initialProgressFor(selectedStartingPoint)
+                        )
+                        onCreateProject(newProject)
+                        Toast.makeText(context, "¡Proyecto '${newProject.name}' creado!", Toast.LENGTH_SHORT).show()
+                    }
                 },
                 enabled = projectName.isNotBlank(),
                 modifier = Modifier
@@ -378,7 +398,7 @@ fun ProjectDetailScreen(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "Crear proyecto",
+                        text = if (isEditing) "Guardar cambios" else "Crear proyecto",
                         style = TextStyle(
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
@@ -396,7 +416,7 @@ fun ProjectDetailScreen(
             }
 
             Text(
-                text = "Cancelar y volver",
+                text = if (isEditing) "Descartar cambios" else "Cancelar y volver",
                 style = TextStyle(fontSize = 13.sp, color = DevFlowColors.TextSecondary, textAlign = TextAlign.Center),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -413,7 +433,8 @@ fun ProjectDetailScreen(
             LocalDate.now().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
         }
         val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = deliveryDateMillis,
+            // Una fecha ya vencida (al editar) no se puede volver a elegir en el calendario.
+            initialSelectedDateMillis = deliveryDateMillis?.takeIf { it >= todayUtcMillis },
             yearRange = LocalDate.now().year..(LocalDate.now().year + 10),
             selectableDates = object : SelectableDates {
                 // Solo se permiten fechas desde hoy en adelante
@@ -548,7 +569,7 @@ private fun PickerField(
             trailingIcon = {
                 Icon(painter = painterResource(id = iconRes), contentDescription = null, tint = DevFlowColors.Cyan, modifier = Modifier.size(18.dp))
             },
-            colors = wizardFieldColors(),
+            colors = devFlowTextFieldColors(filled = true),
             shape = RoundedCornerShape(10.dp)
         )
         // Capa transparente: captura el toque para que no aparezca el teclado.
@@ -604,17 +625,6 @@ private fun StartingPointOption(
         }
     }
 }
-
-@Composable
-private fun wizardFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedContainerColor = DevFlowColors.DarkCard,
-    unfocusedContainerColor = DevFlowColors.DarkCard,
-    focusedBorderColor = DevFlowColors.Primary,
-    unfocusedBorderColor = DevFlowColors.Border,
-    focusedTextColor = Color.White,
-    unfocusedTextColor = Color.White,
-    cursorColor = DevFlowColors.Cyan
-)
 
 @Preview(showBackground = true)
 @Composable

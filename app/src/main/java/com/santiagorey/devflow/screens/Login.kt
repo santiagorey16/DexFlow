@@ -1,7 +1,6 @@
 package com.santiagorey.devflow.screens
 
 import android.content.Context
-import androidx.compose.foundation.Image
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
@@ -54,7 +53,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -80,14 +78,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 
-// Inicio de sesión temporal (solo para desarrollo)
-const val TEMP_LOGIN_EMAIL = "Santiago@gmail.com"
-const val TEMP_LOGIN_PASSWORD = "12345678"
-
-fun isTempLogin(email: String, password: String): Boolean =
-    email.trim().equals(TEMP_LOGIN_EMAIL, ignoreCase = true) &&
-        password == TEMP_LOGIN_PASSWORD
-
 @Composable
 fun StatefulLoginScreen(
     isLoading: Boolean = false,
@@ -101,13 +91,12 @@ fun StatefulLoginScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    // TODO: Quitar credenciales temporales precargadas
     var email by remember {
-        mutableStateOf(TEMP_LOGIN_EMAIL)
+        mutableStateOf("")
     }
 
     var password by remember {
-        mutableStateOf(TEMP_LOGIN_PASSWORD)
+        mutableStateOf("")
     }
 
     var passwordVisible by remember {
@@ -327,18 +316,7 @@ fun LoginScreen(
                 Alignment.CenterHorizontally
         ) {
 
-            Image(
-                painter = painterResource(
-                    id = R.drawable.devflow_logo
-                ),
-                contentDescription = "Logo de DevFlow",
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .size(82.dp)
-                    .clip(
-                        RoundedCornerShape(18.dp)
-                    )
-            )
+            DevFlowLogo(size = 82.dp)
 
             Spacer(
                 modifier =
@@ -382,7 +360,7 @@ fun LoginScreen(
 
                 Text(
                     text =
-                        "DEVELOPER EDITION",
+                        "PROYECTOS • GITHUB • IA",
 
                     style = TextStyle(
                         fontFamily =
@@ -509,23 +487,6 @@ fun LoginScreen(
                                     0.5.sp
                             )
                         )
-
-                        Text(
-                            text =
-                                "dev@identity",
-
-                            style =
-                                TextStyle(
-                                    fontFamily =
-                                        FontFamily.Monospace,
-
-                                    fontSize =
-                                        11.sp,
-
-                                    color =
-                                        Color(0xFF64748B)
-                                )
-                        )
                     }
 
                     Spacer(
@@ -550,7 +511,7 @@ fun LoginScreen(
 
                             Text(
                                 text =
-                                    "alex.dev@ejemplo.com",
+                                    "tu@correo.com",
 
                                 color =
                                     Color(0xFF475569),

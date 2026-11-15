@@ -13,8 +13,11 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
+import com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
+import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 import com.google.firebase.auth.FirebaseUser
+import com.santiagorey.devflow.github.GitHubTokenStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,12 +26,15 @@ import kotlinx.coroutines.launch
 
 const val PROVIDER_GITHUB = "github.com"
 const val PROVIDER_GOOGLE = "google.com"
+const val PROVIDER_PASSWORD = "password"
 
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = AuthRepository()
 
     private val prefs = application.getSharedPreferences("devflow_auth", Context.MODE_PRIVATE)
+
+    private val gitHubTokens = GitHubTokenStore(application)
 
     private val _uiState = MutableStateFlow(initialState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
@@ -37,16 +43,19 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         val user = firebaseAuth.currentUser
         _uiState.update {
             it.copy(
-                isAuthenticated = user != null || it.isTempSession,
+                isAuthenticated = user != null,
                 currentUser = user,
                 providerIds = user.linkedProviderIds(),
-                githubUsername = user?.let { u -> storedGithubUsername(u.uid) }
+                githubUsername = user?.let { u -> storedGithubUsername(u.uid) },
+                githubRepoAccess = hasRepoAccess(user)
             )
         }
     }
 
     init {
         FirebaseAuth.getInstance().addAuthStateListener(authStateListener)
+        // Limpieza de versiones anteriores que tenían una sesión temporal de pruebas.
+        prefs.edit { remove(LEGACY_TEMP_SESSION_KEY) }
         // Refresca los proveedores vinculados por si cambiaron en otro dispositivo.
         if (repository.currentUser != null) {
             viewModelScope.launch {
@@ -62,25 +71,18 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun initialState(): AuthUiState {
         val user = repository.currentUser
-        val tempSession = user == null && prefs.getBoolean(KEY_TEMP_SESSION, false)
         return AuthUiState(
-            isAuthenticated = user != null || tempSession,
+            isAuthenticated = user != null,
             currentUser = user,
             providerIds = user.linkedProviderIds(),
             githubUsername = user?.let { storedGithubUsername(it.uid) },
-            isTempSession = tempSession
+            githubRepoAccess = hasRepoAccess(user)
         )
     }
 
     // =====================================================
     // INICIO DE SESIÓN
     // =====================================================
-
-    /** Sesión local de desarrollo (credenciales temporales). Se conserva al reiniciar la app. */
-    fun loginTemp() {
-        prefs.edit { putBoolean(KEY_TEMP_SESSION, true) }
-        _uiState.update { it.copy(isTempSession = true, isAuthenticated = true) }
-    }
 
     fun loginWithEmail(email: String, password: String) {
         if (email.isBlank() || password.isBlank()) {
@@ -225,6 +227,42 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Da acceso de lectura a los repositorios para el asistente de IA.
+     * Si GitHub no está vinculado lo vincula; si ya lo está, pide autorizar de nuevo
+     * para obtener un token con el permiso "repo".
+     */
+    fun connectGitHubRepos(activity: Activity) {
+        if (!canLink()) return
+        if (PROVIDER_GITHUB !in _uiState.value.providerIds) {
+            linkGitHub(activity)
+            return
+        }
+        _uiState.update { it.copy(linkingProvider = PROVIDER_GITHUB, errorMessage = null) }
+        repository.reauthorizeGitHub(activity) { result ->
+            result.fold(
+                onSuccess = { authResult ->
+                    rememberGithubUsername(authResult)
+                    refreshUser(authResult.user)
+                    val ok = hasRepoAccess(authResult.user)
+                    _uiState.update {
+                        it.copy(
+                            linkingProvider = null,
+                            successMessage = if (ok) "Repositorios de GitHub conectados." else null,
+                            errorMessage = if (ok) null else "GitHub no entregó acceso a los repositorios. Inténtalo de nuevo."
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    Log.e(TAG, "Error in connectGitHubRepos", e)
+                    _uiState.update {
+                        it.copy(linkingProvider = null, errorMessage = friendlyLinkError(e, "GitHub"))
+                    }
+                }
+            )
+        }
+    }
+
     fun linkGoogle(idToken: String) {
         if (!canLink()) return
         viewModelScope.launch {
@@ -257,7 +295,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val user = repository.unlink(providerId)
                 if (providerId == PROVIDER_GITHUB) {
-                    user?.uid?.let { uid -> prefs.edit { remove(githubKey(uid)) } }
+                    user?.uid?.let { uid ->
+                        prefs.edit { remove(githubKey(uid)) }
+                        gitHubTokens.clear(uid)
+                    }
                 }
                 refreshUser(user)
                 _uiState.update { it.copy(linkingProvider = null, successMessage = "Integración desconectada.") }
@@ -270,9 +311,95 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // =====================================================
+    // PERFIL
+    // =====================================================
+
+    fun updateDisplayName(name: String) {
+        if (name.isBlank()) {
+            _uiState.update { it.copy(errorMessage = "El nombre no puede estar vacío.") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isUpdatingProfile = true, errorMessage = null) }
+            try {
+                val user = repository.updateDisplayName(name)
+                _uiState.update {
+                    it.copy(
+                        isUpdatingProfile = false,
+                        currentUser = user,
+                        profileVersion = it.profileVersion + 1,
+                        successMessage = "Nombre actualizado."
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in updateDisplayName", e)
+                _uiState.update {
+                    it.copy(isUpdatingProfile = false, errorMessage = "No se pudo actualizar el nombre. Revisa tu conexión.")
+                }
+            }
+        }
+    }
+
+    fun changePassword(currentPassword: String, newPassword: String) {
+        if (newPassword.length < 8) {
+            _uiState.update { it.copy(errorMessage = "La contraseña debe tener mínimo 8 caracteres.") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isUpdatingProfile = true, errorMessage = null) }
+            try {
+                repository.changePassword(currentPassword, newPassword)
+                _uiState.update {
+                    it.copy(isUpdatingProfile = false, successMessage = "Contraseña actualizada.")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in changePassword", e)
+                val message = when (e) {
+                    is FirebaseAuthInvalidCredentialsException -> "La contraseña actual no es correcta."
+                    is FirebaseAuthWeakPasswordException -> "La nueva contraseña es muy débil."
+                    else -> "No se pudo cambiar la contraseña. Revisa tu conexión."
+                }
+                _uiState.update { it.copy(isUpdatingProfile = false, errorMessage = message) }
+            }
+        }
+    }
+
+    /**
+     * Elimina la cuenta y todos sus datos. [onDeleted] limpia lo guardado en el teléfono
+     * (claves de IA, caché) antes de volver al login.
+     */
+    fun deleteAccount(onDeleted: (uid: String) -> Unit) {
+        val uid = repository.currentUser?.uid ?: return
+        if (!repository.hasRecentLogin()) {
+            _uiState.update {
+                it.copy(errorMessage = "Por seguridad, cierra sesión, vuelve a entrar y elimina la cuenta en los 5 minutos siguientes.")
+            }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isUpdatingProfile = true, errorMessage = null) }
+            try {
+                repository.deleteAccountAndData()
+                gitHubTokens.clear(uid)
+                prefs.edit { remove(githubKey(uid)) }
+                onDeleted(uid)
+                _uiState.update { AuthUiState(successMessage = "Tu cuenta y tus datos fueron eliminados.") }
+            } catch (e: FirebaseAuthRecentLoginRequiredException) {
+                _uiState.update {
+                    it.copy(isUpdatingProfile = false, errorMessage = "Por seguridad, vuelve a iniciar sesión y repite la eliminación.")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in deleteAccount", e)
+                _uiState.update {
+                    it.copy(isUpdatingProfile = false, errorMessage = "No se pudo eliminar la cuenta. Revisa tu conexión e inténtalo de nuevo.")
+                }
+            }
+        }
+    }
+
     fun logout() {
         repository.logout()
-        prefs.edit { putBoolean(KEY_TEMP_SESSION, false) }
         _uiState.update { AuthUiState(isAuthenticated = false, currentUser = null) }
     }
 
@@ -290,16 +417,15 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun onSignedIn(result: AuthResult) {
         rememberGithubUsername(result)
-        prefs.edit { putBoolean(KEY_TEMP_SESSION, false) }
         val user = result.user
         _uiState.update {
             it.copy(
                 isLoading = false,
                 isAuthenticated = true,
-                isTempSession = false,
                 currentUser = user,
                 providerIds = user.linkedProviderIds(),
                 githubUsername = user?.let { u -> storedGithubUsername(u.uid) },
+                githubRepoAccess = hasRepoAccess(user),
                 errorMessage = null
             )
         }
@@ -311,7 +437,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             it.copy(
                 currentUser = current,
                 providerIds = current.linkedProviderIds(),
-                githubUsername = current?.let { u -> storedGithubUsername(u.uid) }
+                githubUsername = current?.let { u -> storedGithubUsername(u.uid) },
+                githubRepoAccess = hasRepoAccess(current)
             )
         }
     }
@@ -326,7 +453,15 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         return true
     }
 
+    private fun hasRepoAccess(user: FirebaseUser?): Boolean =
+        user != null && gitHubTokens.get(user.uid) != null
+
     private fun rememberGithubUsername(result: AuthResult) {
+        // Token para leer repositorios (solo viene al iniciar sesión / vincular con GitHub).
+        val token = result.gitHubAccessToken()
+        val tokenUid = result.user?.uid
+        if (token != null && tokenUid != null) gitHubTokens.save(tokenUid, token)
+
         val info = result.additionalUserInfo ?: return
         if (info.providerId != PROVIDER_GITHUB) return
         val username = info.username ?: return
@@ -371,6 +506,6 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
         const val TAG = "AuthViewModel"
-        const val KEY_TEMP_SESSION = "temp_session"
+        const val LEGACY_TEMP_SESSION_KEY = "temp_session"
     }
 }

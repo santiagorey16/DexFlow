@@ -20,17 +20,21 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +51,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -54,8 +60,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseUser
 import com.santiagorey.devflow.R
+import com.santiagorey.devflow.ai.MentorMode
 import com.santiagorey.devflow.auth.PROVIDER_GITHUB
 import com.santiagorey.devflow.auth.PROVIDER_GOOGLE
+import com.santiagorey.devflow.auth.PROVIDER_PASSWORD
 import com.santiagorey.devflow.ui.theme.DevFlowTheme
 
 private const val XP_PER_LEVEL = 500
@@ -74,7 +82,6 @@ fun SettingsScreens(
     providerIds: Set<String> = emptySet(),
     githubUsername: String? = null,
     linkingProvider: String? = null,
-    isTempSession: Boolean = false,
     experience: Int = 0,
     projectCount: Int = 0,
     completedCount: Int = 0,
@@ -84,16 +91,33 @@ fun SettingsScreens(
     onConnectGitHub: () -> Unit = {},
     onConnectGoogle: () -> Unit = {},
     onDisconnect: (providerId: String) -> Unit = {},
+    aiStatusLabel: String? = null,
+    mentorMode: MentorMode = MentorMode.JUNIOR,
+    onMentorModeChange: (MentorMode) -> Unit = {},
+    githubRepoAccess: Boolean = false,
+    onOpenAiSetup: () -> Unit = {},
+    onOpenAssistant: () -> Unit = {},
+    onDisconnectAi: () -> Unit = {},
+    onConnectGitHubRepos: () -> Unit = {},
+    isProfileBusy: Boolean = false,
+    onOpenPrivacy: () -> Unit = {},
+    onDeleteAccount: () -> Unit = {},
+    onUpdateName: (String) -> Unit = {},
+    onChangePassword: (currentPassword: String, newPassword: String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
 
-    // Preferencias
-    var autoFormat by rememberSaveable { mutableStateOf(true) }
-    var cicdAlerts by rememberSaveable { mutableStateOf(true) }
-    var coachLive by rememberSaveable { mutableStateOf(true) }
-    var strictQuality by rememberSaveable { mutableStateOf(false) }
-    var selectedEditor by rememberSaveable { mutableStateOf("VS Code") }
+    // Preferencias (se guardan en el teléfono y se conservan al cerrar la app)
+    var cicdAlerts by rememberBooleanPreference(PREF_QUALITY_ALERTS, true)
+    var coachLive by rememberBooleanPreference(PREF_COACH_LIVE, true)
+    var strictQuality by rememberBooleanPreference(PREF_STRICT_QUALITY, false)
+
+    // Diálogos de perfil
+    var showEditName by rememberSaveable { mutableStateOf(false) }
+    var showChangePassword by rememberSaveable { mutableStateOf(false) }
+    var showDeleteAccount by rememberSaveable { mutableStateOf(false) }
+    val canChangePassword = currentUser != null && PROVIDER_PASSWORD in providerIds
 
     // Nivel calculado a partir de la experiencia real
     val level = experience / XP_PER_LEVEL + 1
@@ -157,7 +181,7 @@ fun SettingsScreens(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = currentUser?.email ?: if (isTempSession) "Sesión temporal de desarrollo" else "",
+                                text = currentUser?.email.orEmpty(),
                                 style = TextStyle(fontSize = 12.sp, color = DevFlowColors.TextSecondary),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -224,53 +248,6 @@ fun SettingsScreens(
                 }
             }
 
-            // Preferencias de Desarrollo
-            SectionHeader(title = "</> Preferencias de Desarrollo")
-            DevFlowCard {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("EDITOR DE CÓDIGO PREDETERMINADO", style = TextStyle(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 10.sp, color = DevFlowColors.TextSecondary))
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("Cursor", "VS Code", "WebStorm").forEach { editor ->
-                            val isSel = editor == selectedEditor
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSel) DevFlowColors.Primary else DevFlowColors.Background)
-                                    .border(1.dp, if (isSel) DevFlowColors.Cyan else DevFlowColors.Border, RoundedCornerShape(8.dp))
-                                    .clickable { selectedEditor = editor }
-                                    .padding(vertical = 10.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(editor, style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White), maxLines = 1)
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    ToggleSettingRow(
-                        iconRes = R.drawable.ic_settings,
-                        title = "Auto-Formato & Linter al Guardar",
-                        subtitle = "ESLint + Prettier en pre-commit hooks",
-                        checked = autoFormat,
-                        onCheckedChange = { autoFormat = it }
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    ToggleSettingRow(
-                        iconRes = R.drawable.ic_bell,
-                        title = "Alertas CI/CD & Vulnerabilidades",
-                        subtitle = "Notificaciones en fallo de tests o CVEs",
-                        checked = cicdAlerts,
-                        onCheckedChange = { cicdAlerts = it }
-                    )
-                }
-            }
-
             // Integraciones de Desarrollo
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -313,63 +290,173 @@ fun SettingsScreens(
                         onConnect = onConnectGoogle,
                         onDisconnect = { onDisconnect(PROVIDER_GOOGLE) }
                     )
-                    if (isTempSession) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = "Estás en la sesión temporal: inicia sesión con una cuenta real para conectar integraciones.",
-                            style = TextStyle(fontSize = 11.sp, color = DevFlowColors.TextSecondary)
-                        )
+                }
+            }
+
+            // Asistente IA (trae tu propia IA)
+            SectionHeader(title = "🤖 Asistente IA")
+            DevFlowCard {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (aiStatusLabel != null) "Conectada: $aiStatusLabel" else "Sin IA conectada",
+                                style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = "Usa tu propia cuenta de Gemini, Claude o ChatGPT. La clave se guarda cifrada solo en este teléfono.",
+                                style = TextStyle(fontSize = 11.sp, color = DevFlowColors.TextSecondary)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = onOpenAiSetup,
+                            modifier = Modifier.height(34.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = DevFlowColors.Primary)
+                        ) {
+                            Text(if (aiStatusLabel != null) "Cambiar" else "Conectar", style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White), maxLines = 1)
+                        }
+                    }
+                    if (aiStatusLabel != null) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Text("Abrir asistente", color = DevFlowColors.Cyan, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onOpenAssistant() }.padding(vertical = 4.dp))
+                            Text("Desconectar IA", color = DevFlowColors.Red, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onDisconnectAi() }.padding(vertical = 4.dp))
+                        }
+                    }
+                    if (currentUser != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(painter = painterResource(id = R.drawable.ic_github), contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (githubRepoAccess) "La IA puede leer tus repositorios" else "La IA aún no puede leer tus repositorios",
+                                style = TextStyle(fontSize = 12.sp, color = if (githubRepoAccess) DevFlowColors.Green else DevFlowColors.TextSecondary),
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = if (githubRepoAccess) "Renovar" else "Conectar",
+                                color = DevFlowColors.Cyan, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .clickable(enabled = linkingProvider == null) { onConnectGitHubRepos() }
+                                    .padding(4.dp)
+                            )
+                        }
                     }
                 }
             }
 
-            // Normativas & Asistente Junior
-            SectionHeader(title = "🎓 Normativas & Asistente Junior")
+            // Mentor y calidad (opciones que sí cambian el comportamiento de la app)
+            SectionHeader(title = "🎓 Mentor y calidad")
             DevFlowCard {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("DevFlow Coach en Vivo", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(DevFlowColors.Purple.copy(alpha = 0.2f))
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                ) {
-                                    Text("PEDAGÓGICO", style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 9.sp, color = DevFlowColors.Purple))
-                                }
+                    Text("NIVEL DEL ASISTENTE", style = TextStyle(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 10.sp, color = DevFlowColors.TextSecondary))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        MentorMode.entries.forEach { mode ->
+                            val isSel = mode == mentorMode
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSel) DevFlowColors.Primary else DevFlowColors.Background)
+                                    .border(1.dp, if (isSel) DevFlowColors.Cyan else DevFlowColors.Border, RoundedCornerShape(8.dp))
+                                    .clickable { onMentorModeChange(mode) }
+                                    .padding(vertical = 10.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(mode.label, style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White))
                             }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text("Muestra consejos de buenas prácticas mientras trabajas.", style = TextStyle(fontSize = 11.sp, color = DevFlowColors.TextSecondary))
                         }
-                        Switch(
-                            checked = coachLive,
-                            onCheckedChange = { coachLive = it },
-                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = DevFlowColors.Purple)
-                        )
                     }
+                    Text(mentorMode.description, style = TextStyle(fontSize = 11.sp, color = DevFlowColors.TextSecondary), modifier = Modifier.padding(top = 6.dp))
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    ToggleSettingRow(
+                        iconRes = R.drawable.ic_smile,
+                        title = "Coach diario con IA",
+                        subtitle = if (aiStatusLabel != null) "El Dashboard muestra cada día un consejo de tu IA sobre tu proyecto." else "Conecta tu IA para recibir un consejo diario (mientras tanto verás tips generales).",
+                        checked = coachLive,
+                        onCheckedChange = { coachLive = it }
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     ToggleSettingRow(
                         iconRes = R.drawable.ic_shield_check,
-                        title = "Modo Estricto de Calidad",
-                        subtitle = "Pide tests o documentación antes de dar una tarea por completada.",
+                        title = "Modo estricto de calidad",
+                        subtitle = "Antes de marcar un proyecto al 100% pide confirmar pruebas, README, seguridad y aprobación del cliente.",
                         checked = strictQuality,
                         onCheckedChange = { strictQuality = it }
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    ToggleSettingRow(
+                        iconRes = R.drawable.ic_bell,
+                        title = "Alertas de CI y seguridad",
+                        subtitle = "La campana avisa si falla GitHub Actions en tus repos vinculados o si la auditoría detecta secretos.",
+                        checked = cicdAlerts,
+                        onCheckedChange = { cicdAlerts = it }
                     )
                 }
             }
 
             // Cuenta
-            SectionHeader(title = "🛡 Cuenta")
+            SectionHeader(title = "🛡 Privacidad y cuenta")
             DevFlowCard {
                 Column(modifier = Modifier.padding(16.dp)) {
+                    if (currentUser != null) {
+                        AccountActionRow(
+                            iconRes = R.drawable.ic_smile,
+                            title = "Editar nombre",
+                            subtitle = currentUser.displayName?.takeIf { it.isNotBlank() } ?: "Sin nombre",
+                            enabled = !isProfileBusy,
+                            onClick = { showEditName = true }
+                        )
+                        if (canChangePassword) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            AccountActionRow(
+                                iconRes = R.drawable.ic_lock,
+                                title = "Cambiar contraseña",
+                                subtitle = "Necesitarás tu contraseña actual",
+                                enabled = !isProfileBusy,
+                                onClick = { showChangePassword = true }
+                            )
+                        }
+                        if (isProfileBusy) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            LinearProgressIndicator(
+                                modifier = Modifier.fillMaxWidth().height(3.dp),
+                                color = DevFlowColors.Cyan,
+                                trackColor = DevFlowColors.Border
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+
+                    AccountActionRow(
+                        iconRes = R.drawable.ic_shield_check,
+                        title = "Política de privacidad",
+                        subtitle = "Qué datos usa DevFlow y cómo se protegen",
+                        enabled = true,
+                        onClick = onOpenPrivacy
+                    )
+                    if (currentUser != null) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        AccountActionRow(
+                            iconRes = R.drawable.ic_user_add,
+                            title = "Eliminar mi cuenta",
+                            subtitle = "Borra tu cuenta y todos tus datos de forma permanente",
+                            enabled = !isProfileBusy,
+                            onClick = { showDeleteAccount = true }
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+
                     Button(
                         onClick = {
                             Toast.makeText(context, "Cerrando sesión...", Toast.LENGTH_SHORT).show()
@@ -388,7 +475,7 @@ fun SettingsScreens(
             }
 
             Text(
-                text = "DevFlow v1.0 • Developer Edition",
+                text = "DevFlow v${appVersion()}",
                 style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = DevFlowColors.TextSecondary),
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)
@@ -397,6 +484,158 @@ fun SettingsScreens(
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
+
+    if (showEditName) {
+        EditNameDialog(
+            initialName = currentUser?.displayName.orEmpty(),
+            onDismiss = { showEditName = false },
+            onSave = { name ->
+                showEditName = false
+                onUpdateName(name)
+            }
+        )
+    }
+
+    if (showDeleteAccount) {
+        DeleteAccountDialog(
+            onDismiss = { showDeleteAccount = false },
+            onConfirm = {
+                showDeleteAccount = false
+                onDeleteAccount()
+            }
+        )
+    }
+
+    if (showChangePassword) {
+        ChangePasswordDialog(
+            onDismiss = { showChangePassword = false },
+            onSave = { current, new ->
+                showChangePassword = false
+                onChangePassword(current, new)
+            }
+        )
+    }
+}
+
+@Composable
+private fun AccountActionRow(
+    iconRes: Int,
+    title: String,
+    subtitle: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(enabled = enabled) { onClick() }
+            .padding(vertical = 4.dp)
+            .alpha(if (enabled) 1f else 0.5f),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(painter = painterResource(id = iconRes), contentDescription = null, tint = DevFlowColors.Cyan, modifier = Modifier.size(18.dp))
+        Spacer(modifier = Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White))
+            Text(subtitle, style = TextStyle(fontSize = 11.sp, color = DevFlowColors.TextSecondary), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Icon(painter = painterResource(id = R.drawable.ic_arrow_forward), contentDescription = null, tint = DevFlowColors.TextSecondary, modifier = Modifier.size(14.dp))
+    }
+}
+
+@Composable
+private fun EditNameDialog(
+    initialName: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var name by rememberSaveable { mutableStateOf(initialName) }
+    val isValid = name.isNotBlank()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = DevFlowColors.Card,
+        title = { Text("Editar nombre", color = Color.White, fontWeight = FontWeight.Bold) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it.take(60) },
+                singleLine = true,
+                label = { Text("Nombre") },
+                colors = devFlowTextFieldColors(filled = true),
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(name.trim()) },
+                enabled = isValid,
+                colors = ButtonDefaults.buttonColors(containerColor = DevFlowColors.Primary)
+            ) { Text("Guardar") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar", color = DevFlowColors.TextSecondary) }
+        }
+    )
+}
+
+@Composable
+private fun ChangePasswordDialog(
+    onDismiss: () -> Unit,
+    onSave: (currentPassword: String, newPassword: String) -> Unit
+) {
+    var current by remember { mutableStateOf("") }
+    var new by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
+
+    val error = when {
+        new.isNotEmpty() && new.length < 8 -> "Mínimo 8 caracteres."
+        confirm.isNotEmpty() && confirm != new -> "Las contraseñas no coinciden."
+        new.isNotEmpty() && new == current -> "Debe ser distinta a la actual."
+        else -> null
+    }
+    val isValid = current.isNotEmpty() && new.length >= 8 && new == confirm && new != current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = DevFlowColors.Card,
+        title = { Text("Cambiar contraseña", color = Color.White, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                PasswordField(value = current, onValueChange = { current = it }, label = "Contraseña actual")
+                PasswordField(value = new, onValueChange = { new = it }, label = "Nueva contraseña")
+                PasswordField(value = confirm, onValueChange = { confirm = it }, label = "Confirmar nueva contraseña")
+                if (error != null) {
+                    Text(error, color = DevFlowColors.Red, fontSize = 12.sp)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(current, new) },
+                enabled = isValid,
+                colors = ButtonDefaults.buttonColors(containerColor = DevFlowColors.Primary)
+            ) { Text("Cambiar") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar", color = DevFlowColors.TextSecondary) }
+        }
+    )
+}
+
+@Composable
+private fun PasswordField(value: String, onValueChange: (String) -> Unit, label: String) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        label = { Text(label) },
+        visualTransformation = PasswordVisualTransformation(),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+        colors = devFlowTextFieldColors(filled = true),
+        modifier = Modifier.fillMaxWidth()
+    )
 }
 
 @Composable
@@ -535,4 +774,51 @@ fun SettingsScreensPreview() {
     DevFlowTheme {
         SettingsScreens()
     }
+}
+
+/** Versión instalada de la app (la del build.gradle). */
+@Composable
+private fun appVersion(): String {
+    val context = LocalContext.current
+    return remember {
+        runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }
+            .getOrNull() ?: "—"
+    }
+}
+
+/** Confirmación fuerte: hay que escribir ELIMINAR para borrar la cuenta. */
+@Composable
+private fun DeleteAccountDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    var typed by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = DevFlowColors.Card,
+        title = { Text("Eliminar mi cuenta", color = Color.White, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "Se borrarán para siempre tu cuenta, proyectos, clientes, tareas e historial del asistente. No se puede deshacer.",
+                    color = DevFlowColors.TextSecondary, fontSize = 13.sp
+                )
+                Text("Escribe ELIMINAR para confirmar:", color = Color.White, fontSize = 13.sp)
+                OutlinedTextField(
+                    value = typed,
+                    onValueChange = { typed = it },
+                    singleLine = true,
+                    colors = devFlowTextFieldColors(filled = true),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                enabled = typed.trim().equals("ELIMINAR", ignoreCase = true),
+                colors = ButtonDefaults.buttonColors(containerColor = DevFlowColors.Red)
+            ) { Text("Eliminar") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar", color = DevFlowColors.TextSecondary) }
+        }
+    )
 }

@@ -1,9 +1,8 @@
 package com.santiagorey.devflow.screens
 
-import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -25,8 +24,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -59,6 +56,9 @@ fun GuidesScreens(
     onTabSelected: (Int) -> Unit = {},
     onLogoutClick: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    auditCard: @Composable () -> Unit = {},
+    learningCard: @Composable () -> Unit = {},
+    onAskAi: (prompt: String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -150,56 +150,11 @@ fun GuidesScreens(
                 }
             }
 
-            // Auditoría: sin datos hasta que el usuario conecte un repositorio
-            DevFlowCard {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("AUDITORÍA DE REPOSITORIOS", style = TextStyle(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 10.sp, color = DevFlowColors.Cyan))
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text("Apego a Normas DevFlow", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 17.sp, color = Color.White))
-                            Text("Aún no hay repositorios evaluados. Conecta tu cuenta de GitHub en Ajustes para empezar.", style = TextStyle(fontSize = 11.sp, color = DevFlowColors.TextSecondary))
-                        }
+            // Reto del día y ruta de aprendizaje
+            learningCard()
 
-                        Spacer(modifier = Modifier.width(12.dp))
-
-                        Box(
-                            modifier = Modifier
-                                .size(54.dp)
-                                .clip(CircleShape)
-                                .background(DevFlowColors.Background)
-                                .border(2.dp, DevFlowColors.Border, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("--", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 14.sp, color = DevFlowColors.TextSecondary))
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        MetricSmallBox(modifier = Modifier.weight(1f), label = "OWASP", valStr = "--", color = DevFlowColors.TextSecondary)
-                        MetricSmallBox(modifier = Modifier.weight(1f), label = "Coverage", valStr = "--", color = DevFlowColors.TextSecondary)
-                        MetricSmallBox(modifier = Modifier.weight(1f), label = "Commits", valStr = "--", color = DevFlowColors.TextSecondary)
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    Button(
-                        onClick = onOpenSettings,
-                        modifier = Modifier.fillMaxWidth().height(42.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = DevFlowColors.Primary)
-                    ) {
-                        Icon(painter = painterResource(id = R.drawable.ic_github), contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Conectar GitHub", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White), maxLines = 1)
-                    }
-                }
-            }
+            // Auditoría real del repositorio (ver RepoAuditCard)
+            auditCard()
 
             if (visibleGuides.isEmpty()) {
                 EmptyStateCard(
@@ -209,18 +164,23 @@ fun GuidesScreens(
             }
 
             visibleGuides.forEach { guide ->
-                GuideCard(guide = guide)
+                GuideCard(guide = guide, onAskAi = onAskAi)
             }
 
-            // Boilerplates & Plantillas
-            Text("Boilerplates & Plantillas", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White))
+            // Plantillas listas para copiar en tu repositorio
+            Text("Plantillas para tu repositorio", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White))
+            Text(
+                "Cópialas y pégalas en un archivo nuevo de tu proyecto. Suben tu puntaje en la auditoría.",
+                style = TextStyle(fontSize = 12.sp, color = DevFlowColors.TextSecondary)
+            )
 
-            boilerplates.forEach { template ->
-                BoilerplateCard(
-                    title = template.title,
-                    version = template.version,
-                    desc = template.description,
-                    onOpen = { openUrl(context, template.url) }
+            guideTemplates.forEach { template ->
+                TemplateCard(
+                    template = template,
+                    onCopy = {
+                        copyToClipboard(context, template.fileName, template.content)
+                        Toast.makeText(context, "${template.fileName} copiado al portapapeles", Toast.LENGTH_SHORT).show()
+                    }
                 )
             }
 
@@ -238,13 +198,6 @@ private data class Guide(
     val description: String,
     val tags: List<String>,
     val details: String
-)
-
-private data class Boilerplate(
-    val title: String,
-    val version: String,
-    val description: String,
-    val url: String
 )
 
 private val guides = listOf(
@@ -290,39 +243,10 @@ private val guides = listOf(
     )
 )
 
-private val boilerplates = listOf(
-    Boilerplate("Node.js API Starter", "Fastify", "Fastify CLI para generar APIs con buenas prácticas", "https://github.com/fastify/fastify-cli"),
-    Boilerplate("Next.js Starter", "App Router", "Ejemplos oficiales de Next.js con App Router", "https://github.com/vercel/next.js/tree/canary/examples"),
-    Boilerplate("Flutter App Template", "BLoC", "Ejemplos de arquitectura por capas con BLoC", "https://github.com/felangel/bloc/tree/master/examples")
-)
-
-private fun openUrl(context: Context, url: String) {
-    try {
-        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-    } catch (e: ActivityNotFoundException) {
-        Toast.makeText(context, "No hay un navegador disponible.", Toast.LENGTH_SHORT).show()
-    }
-}
-
-@Composable
-private fun MetricSmallBox(modifier: Modifier, label: String, valStr: String, color: Color) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(DevFlowColors.Background)
-            .border(1.dp, DevFlowColors.Border, RoundedCornerShape(8.dp))
-            .padding(8.dp)
-    ) {
-        Column {
-            Text(label, style = TextStyle(fontSize = 9.sp, color = DevFlowColors.TextSecondary), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(valStr, style = TextStyle(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = color))
-        }
-    }
-}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun GuideCard(guide: Guide) {
+private fun GuideCard(guide: Guide, onAskAi: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     DevFlowCard(modifier = Modifier.clickable { expanded = !expanded }) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -352,6 +276,20 @@ private fun GuideCard(guide: Guide) {
             if (expanded) {
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(guide.details, style = TextStyle(fontSize = 12.sp, color = Color.White, lineHeight = 18.sp))
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "🤖 Pregúntale a la IA cómo aplicarla",
+                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = DevFlowColors.Purple),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable {
+                            onAskAi(
+                                "Explícame la guía \"${guide.title}\" (${guide.code}) y cómo aplicarla paso a paso " +
+                                    "en mi proyecto, con un ejemplo concreto de código."
+                            )
+                        }
+                        .padding(vertical = 6.dp)
+                )
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -373,46 +311,59 @@ private fun GuideCard(guide: Guide) {
 }
 
 @Composable
-private fun BoilerplateCard(title: String, version: String, desc: String, onOpen: () -> Unit) {
-    DevFlowCard(modifier = Modifier.clickable { onOpen() }) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(DevFlowColors.Background),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(painter = painterResource(id = R.drawable.ic_folder), contentDescription = null, tint = DevFlowColors.Cyan, modifier = Modifier.size(20.dp))
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            // Título y etiqueta (p. ej. "App Router") apilados para que no se compriman en el teléfono
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(4.dp))
+private fun TemplateCard(template: GuideTemplate, onCopy: () -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    DevFlowCard(modifier = Modifier.clickable { expanded = !expanded }) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(DevFlowColors.Primary.copy(alpha = 0.2f))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(DevFlowColors.Background),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(version, style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 9.sp, color = DevFlowColors.Cyan), maxLines = 1)
+                    Icon(painter = painterResource(id = R.drawable.ic_folder), contentDescription = null, tint = DevFlowColors.Cyan, modifier = Modifier.size(20.dp))
                 }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(desc, style = TextStyle(fontSize = 11.sp, color = DevFlowColors.TextSecondary), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(template.title, style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(template.fileName, style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = DevFlowColors.Cyan), maxLines = 1)
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(template.description, style = TextStyle(fontSize = 11.sp, color = DevFlowColors.TextSecondary), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(DevFlowColors.Primary)
+                        .clickable { onCopy() }
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Text("Copiar", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White))
+                }
             }
-            Spacer(modifier = Modifier.width(8.dp))
-            Icon(painter = painterResource(id = R.drawable.ic_arrow_forward), contentDescription = "Abrir", tint = DevFlowColors.Cyan, modifier = Modifier.size(18.dp))
+            if (expanded) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    template.content,
+                    style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = Color(0xFFE2E8F0), lineHeight = 14.sp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(DevFlowColors.Background)
+                        .padding(10.dp)
+                )
+            } else {
+                Text("Toca para ver el contenido", style = TextStyle(fontSize = 10.sp, color = DevFlowColors.TextDark), modifier = Modifier.padding(top = 6.dp))
+            }
         }
     }
+}
+
+private fun copyToClipboard(context: Context, label: String, text: String) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
 }
 
 @Preview(showBackground = true)

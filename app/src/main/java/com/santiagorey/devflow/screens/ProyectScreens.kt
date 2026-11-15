@@ -22,24 +22,19 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -72,16 +67,15 @@ fun ProyectScreens(
     clients: List<Client> = emptyList(),
     onTabSelected: (Int) -> Unit = {},
     onLogoutClick: () -> Unit = {},
-    onNavigateToProjectDetail: () -> Unit = {},
-    onUpdateProgress: (projectId: String, progress: Int) -> Unit = { _, _ -> },
-    onDeleteProject: (projectId: String) -> Unit = {},
+    onNewProjectClick: () -> Unit = {},
+    onOpenProject: (projectId: String) -> Unit = {},
+    onOpenAssistant: () -> Unit = {},
     onOpenClient: (clientId: String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var searchQuery by rememberSaveable { mutableStateOf("") }
     // -1 = Todos; 0..4 = índice de fase
     var selectedPhase by rememberSaveable { mutableIntStateOf(-1) }
-    var managedProjectId by rememberSaveable { mutableStateOf<String?>(null) }
 
     fun clientOf(project: Project) = clients.firstOrNull { it.id == project.clientId }
 
@@ -100,6 +94,16 @@ fun ProyectScreens(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = DevFlowColors.Background,
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = onOpenAssistant,
+                containerColor = DevFlowColors.Purple,
+                contentColor = Color.White,
+                shape = CircleShape
+            ) {
+                Text("🤖", fontSize = 22.sp)
+            }
+        },
         bottomBar = {
             DevFlowBottomBar(
                 selectedTab = 1, // Pestaña Proyectos
@@ -145,7 +149,7 @@ fun ProyectScreens(
                 Spacer(modifier = Modifier.width(8.dp))
 
                 Button(
-                    onClick = onNavigateToProjectDetail,
+                    onClick = onNewProjectClick,
                     modifier = Modifier.height(40.dp),
                     contentPadding = PaddingValues(horizontal = 14.dp),
                     shape = RoundedCornerShape(10.dp),
@@ -164,7 +168,7 @@ fun ProyectScreens(
                     title = "Aún no tienes proyectos",
                     subtitle = "Crea tu primer proyecto con el asistente y aparecerá aquí con su avance y fecha de entrega.",
                     actionLabel = "+ Crear proyecto",
-                    onAction = onNavigateToProjectDetail
+                    onAction = onNewProjectClick
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 return@Column
@@ -197,7 +201,7 @@ fun ProyectScreens(
             }
 
             Text(
-                text = "↕ Ordenado por fecha de entrega",
+                text = "Ordenado por fecha de entrega",
                 style = TextStyle(fontSize = 11.sp, color = DevFlowColors.TextSecondary)
             )
 
@@ -214,7 +218,7 @@ fun ProyectScreens(
                     project = project,
                     clientName = client?.name,
                     onClientClick = client?.let { c -> { onOpenClient(c.id) } },
-                    onManageClick = { managedProjectId = project.id }
+                    onManageClick = { onOpenProject(project.id) }
                 )
             }
 
@@ -260,22 +264,6 @@ fun ProyectScreens(
         }
     }
 
-    val managedProject = managedProjectId?.let { id -> projects.firstOrNull { it.id == id } }
-    if (managedProject != null) {
-        ManageProjectDialog(
-            project = managedProject,
-            clientName = clientOf(managedProject)?.name,
-            onDismiss = { managedProjectId = null },
-            onSaveProgress = { progress ->
-                onUpdateProgress(managedProject.id, progress)
-                managedProjectId = null
-            },
-            onDelete = {
-                onDeleteProject(managedProject.id)
-                managedProjectId = null
-            }
-        )
-    }
 }
 
 @Composable
@@ -301,7 +289,7 @@ private fun ProjectCardItem(
     onManageClick: () -> Unit
 ) {
     val statusColor = phaseColor(project.progress)
-    DevFlowCard {
+    DevFlowCard(modifier = Modifier.clickable { onManageClick() }) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -396,7 +384,7 @@ private fun ProjectCardItem(
                         .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Gestionar", style = TextStyle(fontSize = 11.sp, color = DevFlowColors.Cyan, fontWeight = FontWeight.Bold))
+                        Text(if (project.tasks.isEmpty()) "Ver detalle" else "${project.tasks.count { it.done }}/${project.tasks.size} tareas", style = TextStyle(fontSize = 11.sp, color = DevFlowColors.Cyan, fontWeight = FontWeight.Bold))
                         Spacer(modifier = Modifier.width(4.dp))
                         Icon(painter = painterResource(id = R.drawable.ic_arrow_forward), contentDescription = null, tint = DevFlowColors.Cyan, modifier = Modifier.size(12.dp))
                     }
@@ -406,74 +394,6 @@ private fun ProjectCardItem(
     }
 }
 
-@Composable
-private fun ManageProjectDialog(
-    project: Project,
-    clientName: String?,
-    onDismiss: () -> Unit,
-    onSaveProgress: (Int) -> Unit,
-    onDelete: () -> Unit
-) {
-    var progress by remember(project.id) { mutableFloatStateOf(project.progress.toFloat()) }
-    var confirmDelete by remember { mutableStateOf(false) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = DevFlowColors.Card,
-        title = {
-            Text(project.name, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Cliente: ${clientName ?: "sin asignar"}", color = DevFlowColors.TextSecondary, fontSize = 12.sp)
-                Text("Entrega: ${formatDeliveryDate(project.deliveryDateMillis)}", color = DevFlowColors.TextSecondary, fontSize = 12.sp)
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Avance", color = DevFlowColors.TextSecondary, fontSize = 12.sp)
-                    Text(
-                        text = "${progress.toInt()}% • ${projectPhases[currentPhaseIndex(progress.toInt())].name}",
-                        color = DevFlowColors.BrightCyan,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                Slider(
-                    value = progress,
-                    onValueChange = { progress = it },
-                    valueRange = 0f..100f,
-                    steps = 19,
-                    colors = SliderDefaults.colors(
-                        thumbColor = DevFlowColors.Cyan,
-                        activeTrackColor = DevFlowColors.Cyan,
-                        inactiveTrackColor = DevFlowColors.Border
-                    )
-                )
-                Text(
-                    text = if (confirmDelete) "Toca de nuevo para confirmar" else "Eliminar proyecto",
-                    color = DevFlowColors.Red,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .clickable { if (confirmDelete) onDelete() else confirmDelete = true }
-                        .padding(vertical = 6.dp)
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onSaveProgress(progress.toInt()) },
-                colors = ButtonDefaults.buttonColors(containerColor = DevFlowColors.Primary)
-            ) {
-                Text("Guardar")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancelar", color = DevFlowColors.TextSecondary)
-            }
-        }
-    )
-}
 
 @Preview(showBackground = true)
 @Composable

@@ -15,12 +15,19 @@ data class AuthUiState(
     val providerIds: Set<String> = emptySet(),
     /** Usuario de GitHub obtenido al iniciar sesión o vincular la cuenta. */
     val githubUsername: String? = null,
-    /** Sesión de desarrollo (credenciales temporales, sin Firebase). */
-    val isTempSession: Boolean = false,
+    /** Hay un token de GitHub guardado: el asistente puede leer los repositorios. */
+    val githubRepoAccess: Boolean = false,
     /** Proveedor que se está vinculando ahora mismo desde Ajustes. */
-    val linkingProvider: String? = null
+    val linkingProvider: String? = null,
+    /** Se está guardando un cambio de perfil (nombre o contraseña). */
+    val isUpdatingProfile: Boolean = false,
+    /**
+     * Cambia cada vez que se edita el perfil. FirebaseUser es el mismo objeto aunque cambie
+     * su nombre, así que sin este contador la pantalla no se enteraría del cambio.
+     */
+    val profileVersion: Int = 0
 ) {
     /** Identificador usado para separar los datos guardados de cada cuenta. */
     val dataKey: String?
-        get() = currentUser?.uid ?: if (isTempSession) "temp_session" else null
+        get() = currentUser?.uid
 }

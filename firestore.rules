@@ -1,0 +1,12 @@
+rules_version = '2';
+
+// Reglas de seguridad de DevFlow.
+// Cada usuario solo puede leer y escribir sus propios datos en users/{uid}/...
+// Copia este contenido en Firebase Console → Firestore Database → Reglas → Publicar.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}

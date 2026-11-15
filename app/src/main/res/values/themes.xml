@@ -1,5 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.DevFlow" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Tema de la app. El fondo de la ventana es negro para que no haya un destello blanco al abrir. -->
+    <style name="Theme.DevFlow" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/black</item>
+    </style>
+
+    <!-- Pantalla de inicio: fondo negro con el logo de DevFlow en el centro. -->
+    <style name="Theme.DevFlow.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/black</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_logo</item>
+        <item name="postSplashScreenTheme">@style/Theme.DevFlow</item>
+    </style>
 </resources>

@@ -1,7 +1,6 @@
 package com.santiagorey.devflow.screens
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,27 +9,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.google.firebase.auth.FirebaseUser
 import com.santiagorey.devflow.R
 import com.santiagorey.devflow.projects.ActivityEntry
@@ -44,39 +36,6 @@ import com.santiagorey.devflow.projects.projectPhases
 import com.santiagorey.devflow.ui.theme.DevFlowTheme
 
 
-internal object DevFlowColors {
-
-    val Background = Color(0xFF0B0E14)
-    val Card = Color(0xFF111622)
-    val DarkCard = Color(0xFF0A0D14)
-    val Border = Color(0xFF1E293B)
-
-    val Primary = Color(0xFF635BFF)
-    val Cyan = Color(0xFF38BDF8)
-    val BrightCyan = Color(0xFF00E5FF)
-    val Purple = Color(0xFFA855F7)
-    val Green = Color(0xFF22C55E)
-    val Red = Color(0xFFEF4444)
-
-    val TextSecondary = Color(0xFF94A3B8)
-    val TextDark = Color(0xFF64748B)
-}
-
-/** Color asociado a la fase de un proyecto. */
-internal fun phaseColor(progress: Int): Color =
-    when {
-        progress >= 100 -> DevFlowColors.Green
-        progress >= 80 -> DevFlowColors.BrightCyan
-        progress >= 40 -> DevFlowColors.Cyan
-        progress >= 20 -> DevFlowColors.Purple
-        else -> DevFlowColors.TextSecondary
-    }
-
-/** Nombre a mostrar del usuario (nombre, o la parte local del correo). */
-internal fun FirebaseUser?.friendlyName(): String =
-    this?.displayName?.takeIf { it.isNotBlank() }
-        ?: this?.email?.substringBefore('@')
-        ?: "Developer"
 
 
 @Composable
@@ -89,9 +48,15 @@ fun DashboardScreen(
     onLogoutClick: () -> Unit = {},
     onNewProject: () -> Unit = {},
     onNewClient: () -> Unit = {},
+    aiConnectedLabel: String? = null,
+    onOpenAssistant: (projectId: String?) -> Unit = {},
+    onOpenProject: (projectId: String) -> Unit = {},
+    coachTip: String? = null,
+    coachLoading: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    var showTipCard by remember { mutableStateOf(true) }
+
+    val coachEnabled by rememberBooleanPreference(PREF_COACH_LIVE, true)
 
     val activeProjects = projects.filter { !it.isCompleted }
     val completedCount = projects.size - activeProjects.size
@@ -167,9 +132,39 @@ fun DashboardScreen(
                     ContinueWorkingCard(
                         project = focusProject,
                         clientName = clientName,
-                        onOpen = { onTabSelected(1) }
+                        onOpen = { onOpenProject(focusProject.id) }
                     )
                 }
+            }
+
+            // 3a. Aviso de entregas vencidas
+            if (overdue.isNotEmpty()) {
+                item {
+                    OverdueBanner(
+                        count = overdue.size,
+                        firstName = overdue.first().name,
+                        onClick = { onOpenProject(overdue.first().id) }
+                    )
+                }
+            }
+
+            // 3a. Coach con IA o tip del día
+            item {
+                CoachOrTipCard(
+                    coachEnabled = coachEnabled && aiConnectedLabel != null && focusProject != null,
+                    coachTip = coachTip,
+                    coachLoading = coachLoading,
+                    projectName = focusProject?.name
+                )
+            }
+
+            // 3b. Asistente IA
+            item {
+                AssistantEntryCard(
+                    connectedLabel = aiConnectedLabel,
+                    projectName = focusProject?.name,
+                    onClick = { onOpenAssistant(focusProject?.id) }
+                )
             }
 
             // 4. Métricas reales
@@ -242,7 +237,7 @@ fun DashboardScreen(
                     DashboardProjectItem(
                         project = project,
                         clientName = clients.firstOrNull { it.id == project.clientId }?.name,
-                        onClick = { onTabSelected(1) }
+                        onClick = { onOpenProject(project.id) }
                     )
                 }
             }
@@ -283,55 +278,12 @@ fun DashboardScreen(
                 }
             }
 
-            // 8. Buenas Prácticas Junior Banner
-            if (showTipCard) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0F2937)),
-                        border = BorderStroke(1.dp, Color(0xFF155E75))
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("💡", fontSize = 16.sp)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("BUENAS PRÁCTICAS JUNIOR", style = TextStyle(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = DevFlowColors.Cyan))
-                                }
-                                Text(
-                                    text = "✕",
-                                    style = TextStyle(color = DevFlowColors.TextSecondary, fontSize = 14.sp),
-                                    modifier = Modifier.clickable { showTipCard = false }
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Define los requisitos y la fecha de entrega antes de programar: reduce errores y reprocesos.",
-                                style = TextStyle(fontSize = 12.sp, color = DevFlowColors.TextSecondary, lineHeight = 16.sp)
-                            )
-                        }
-                    }
-                }
-            }
 
             item { Spacer(modifier = Modifier.height(10.dp)) }
         }
     }
 }
 
-internal fun daysLabel(days: Long?): String =
-    when {
-        days == null -> "sin fecha"
-        days < 0 -> "vencido"
-        days == 0L -> "hoy"
-        days == 1L -> "mañana"
-        else -> "en $days días"
-    }
 
 @Composable
 private fun WelcomeCard(
@@ -584,6 +536,130 @@ private fun DashboardProjectItem(
     }
 }
 
+/** Consejos generales que rotan cada día (cuando no hay coach con IA). */
+private val dailyTips = listOf(
+    "Define los requisitos y la fecha de entrega antes de programar: reduce errores y reprocesos.",
+    "Haz commits pequeños y frecuentes con mensajes claros (feat:, fix:, docs:…).",
+    "Escribe primero la prueba de la lógica más importante: te da confianza para cambiar el código después.",
+    "Nunca subas claves ni archivos .env al repositorio; usa variables de entorno o un gestor de secretos.",
+    "Antes de pedir ayuda, escribe en una frase qué esperabas y qué pasó: muchas veces encuentras el error ahí.",
+    "Divide las tareas grandes en partes de menos de un día: así ves el avance real.",
+    "Actualiza el README cada vez que cambie cómo se instala o ejecuta el proyecto.",
+    "Revisa tu propio código como si fuera de otra persona antes de hacer el merge."
+)
+
+@Composable
+private fun OverdueBanner(count: Int, firstName: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(DevFlowColors.Red.copy(alpha = 0.12f))
+            .border(1.dp, DevFlowColors.Red.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+            .clickable { onClick() }
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("⚠", fontSize = 18.sp, color = DevFlowColors.Red)
+        Spacer(modifier = Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                if (count == 1) "1 proyecto con entrega vencida" else "$count proyectos con entrega vencida",
+                style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White)
+            )
+            Text(
+                if (count == 1) "\"$firstName\" · toca para revisarlo" else "Empieza por \"$firstName\"",
+                style = TextStyle(fontSize = 11.sp, color = DevFlowColors.TextSecondary),
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+        }
+        Icon(painter = painterResource(id = R.drawable.ic_arrow_forward), contentDescription = null, tint = DevFlowColors.Red, modifier = Modifier.size(14.dp))
+    }
+}
+
+@Composable
+private fun CoachOrTipCard(coachEnabled: Boolean, coachTip: String?, coachLoading: Boolean, projectName: String?) {
+    val today = java.time.LocalDate.now()
+    var dismissedDay by rememberStringPreference("tip_dismissed_day", "")
+    // El tip general se puede cerrar por hoy; el coach siempre se muestra si está activo.
+    if (!coachEnabled && dismissedDay == today.toString()) return
+
+    val isCoach = coachEnabled && (coachTip != null || coachLoading)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = if (isCoach) Color(0xFF1E1535) else Color(0xFF0F2937)),
+        border = BorderStroke(1.dp, if (isCoach) DevFlowColors.Purple.copy(alpha = 0.6f) else Color(0xFF155E75))
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(if (isCoach) "🤖" else "💡", fontSize = 16.sp)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    if (isCoach) "COACH DEL DÍA" + (projectName?.let { " · ${it.uppercase()}" } ?: "") else "TIP DEL DÍA",
+                    style = TextStyle(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = if (isCoach) DevFlowColors.Purple else DevFlowColors.Cyan),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                if (!isCoach) {
+                    Text(
+                        text = "✕",
+                        style = TextStyle(color = DevFlowColors.TextSecondary, fontSize = 14.sp),
+                        modifier = Modifier.clickable { dismissedDay = today.toString() }.padding(4.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            when {
+                isCoach && coachLoading && coachTip == null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = DevFlowColors.Purple)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Preparando tu consejo…", style = TextStyle(fontSize = 12.sp, color = DevFlowColors.TextSecondary))
+                }
+                else -> Text(
+                    text = if (isCoach) coachTip.orEmpty() else dailyTips[today.dayOfYear % dailyTips.size],
+                    style = TextStyle(fontSize = 12.sp, color = DevFlowColors.TextSecondary, lineHeight = 17.sp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AssistantEntryCard(connectedLabel: String?, projectName: String?, onClick: () -> Unit) {
+    DevFlowCard(modifier = Modifier.clickable { onClick() }) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(DevFlowColors.Purple.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("🤖", fontSize = 20.sp)
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Asistente IA", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.White))
+                Text(
+                    text = when {
+                        connectedLabel == null -> "Conecta tu IA de confianza y deja que revise tus repos."
+                        projectName != null -> "Revisa el avance de \"$projectName\" con $connectedLabel"
+                        else -> "Pregúntale a $connectedLabel sobre tu desarrollo"
+                    },
+                    style = TextStyle(fontSize = 12.sp, color = DevFlowColors.TextSecondary),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Icon(painter = painterResource(id = R.drawable.ic_arrow_forward), contentDescription = null, tint = DevFlowColors.Cyan, modifier = Modifier.size(16.dp))
+        }
+    }
+}
+
 @Composable
 private fun ActivityRow(iconRes: Int, title: String, time: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -605,930 +681,6 @@ private fun ActivityRow(iconRes: Int, title: String, time: String) {
 }
 
 
-// =====================================================
-// LOGO REAL DE DEVFLOW
-// =====================================================
-
-@Composable
-fun DevFlowLogo(
-    size: Dp = 52.dp
-) {
-
-    Image(
-        painter = painterResource(
-            id = R.drawable.devflow_logo
-        ),
-
-        contentDescription = "Logo de DevFlow",
-
-        contentScale = ContentScale.Fit,
-
-        modifier = Modifier
-            .size(size)
-            .clip(
-                RoundedCornerShape(12.dp)
-            )
-    )
-}
-
-
-// =====================================================
-// AVATAR DE PERFIL
-// =====================================================
-
-@Composable
-fun ProfileAvatar(
-    photoUrl: String? = null,
-    displayName: String? = null,
-    onClick: () -> Unit = {},
-    modifier: Modifier = Modifier
-) {
-
-    val initials = remember(displayName) {
-
-        if (!displayName.isNullOrBlank()) {
-
-            val parts = displayName
-                .trim()
-                .split(" ")
-                .filter { it.isNotBlank() }
-
-            if (parts.size >= 2) {
-
-                "${parts.first().take(1)}${parts.last().take(1)}"
-                    .uppercase()
-
-            } else {
-
-                displayName
-                    .take(2)
-                    .uppercase()
-            }
-
-        } else {
-
-            "SR"
-        }
-    }
-
-    Box(
-        modifier = modifier
-            .size(40.dp)
-            .clip(CircleShape)
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        DevFlowColors.Primary,
-                        DevFlowColors.Purple
-                    )
-                )
-            )
-            .border(
-                width = 1.5.dp,
-
-                brush = Brush.linearGradient(
-                    listOf(
-                        DevFlowColors.Cyan,
-                        DevFlowColors.Primary
-                    )
-                ),
-
-                shape = CircleShape
-            )
-            .clickable {
-                onClick()
-            },
-
-        contentAlignment = Alignment.Center
-    ) {
-
-        if (!photoUrl.isNullOrBlank()) {
-
-            AsyncImage(
-                model = photoUrl,
-                contentDescription = "Foto de perfil",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-
-        } else {
-
-            Text(
-                text = initials,
-
-                style = TextStyle(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    color = Color.White
-                )
-            )
-        }
-    }
-}
-
-
-@Composable
-fun TopHeaderBar(
-    currentUser: FirebaseUser? = null,
-    onLogoutClick: () -> Unit = {},
-    section: String = "DASHBOARD"
-) {
-
-    var showMenu by remember {
-        mutableStateOf(false)
-    }
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-
-        horizontalArrangement = Arrangement.SpaceBetween,
-
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-
-            DevFlowLogo(
-                size = 54.dp
-            )
-
-            Spacer(
-                modifier = Modifier.width(10.dp)
-            )
-
-            Column {
-
-                Row {
-
-                    Text(
-                        text = "Dev",
-                        color = Color.White,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-
-                    Text(
-                        text = "Flow",
-                        color = DevFlowColors.Cyan,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
-
-                SmallLabel(
-                    text = section
-                )
-            }
-        }
-
-        Box {
-
-            ProfileAvatar(
-                photoUrl = currentUser
-                    ?.photoUrl
-                    ?.toString(),
-
-                displayName = currentUser?.displayName
-                    ?: currentUser?.email,
-
-                onClick = {
-                    showMenu = true
-                }
-            )
-
-            DropdownMenu(
-                expanded = showMenu,
-
-                onDismissRequest = {
-                    showMenu = false
-                }
-            ) {
-
-                DropdownMenuItem(
-                    text = {
-
-                        Column {
-
-                            Text(
-                                text = currentUser?.displayName
-                                    ?: "Usuario DevFlow",
-
-                                style = TextStyle(
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    fontSize = 14.sp
-                                )
-                            )
-
-                            currentUser?.email?.let { email ->
-
-                                Text(
-                                    text = email,
-
-                                    style = TextStyle(
-                                        color = Color(0xFF94A3B8),
-                                        fontSize = 11.sp
-                                    )
-                                )
-                            }
-                        }
-                    },
-
-                    onClick = {
-                        showMenu = false
-                    }
-                )
-
-                DropdownMenuItem(
-                    text = {
-
-                        Text(
-                            text = "Cerrar sesión",
-                            color = Color.Red
-                        )
-                    },
-
-                    onClick = {
-
-                        showMenu = false
-
-                        onLogoutClick()
-                    }
-                )
-            }
-        }
-    }
-}
-
-
-
-@Composable
-fun HeaderSection(
-    clientCount: Int,
-    projectCount: Int,
-    onAddClientClick: () -> Unit
-) {
-
-    Column {
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
-        ) {
-
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-
-                Text(
-                    text = "Clientes",
-                    fontSize = 20.sp,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = "Gestiona tus clientes y sus proyectos",
-                    fontSize = 12.sp,
-                    color = DevFlowColors.TextSecondary
-                )
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            Button(
-                onClick = onAddClientClick,
-                modifier = Modifier.height(40.dp),
-                contentPadding = PaddingValues(horizontal = 14.dp),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = DevFlowColors.Primary
-                )
-            ) {
-                Text(
-                    text = "+ Agregar",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
-                    maxLines = 1
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            MetricCard(
-                modifier = Modifier.weight(1f),
-                title = "Clientes",
-                value = clientCount.toString(),
-                subtitle = "registrados"
-            )
-            MetricCard(
-                modifier = Modifier.weight(1f),
-                title = "Proyectos",
-                value = projectCount.toString(),
-                subtitle = "asignados"
-            )
-        }
-    }
-}
-
-
-@Composable
-fun MetricCard(
-    title: String,
-    value: String,
-    subtitle: String,
-    modifier: Modifier = Modifier,
-    valueColor: Color = Color.White
-) {
-
-    DevFlowCard(
-        modifier = modifier.height(95.dp)
-    ) {
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp),
-
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-
-            SmallLabel(
-                text = title.uppercase()
-            )
-
-            Row(
-                verticalAlignment = Alignment.Bottom
-            ) {
-
-                Text(
-                    text = value,
-                    fontSize = 22.sp,
-                    color = valueColor,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(
-                    modifier = Modifier.width(6.dp)
-                )
-
-                Text(
-                    text = subtitle,
-                    fontSize = 10.sp,
-                    color = DevFlowColors.TextSecondary
-                )
-            }
-        }
-    }
-}
-
-
-
-@Composable
-fun SearchSection(
-    searchQuery: String,
-    onSearchQueryChange: (String) -> Unit,
-    placeholder: String = "Buscar cliente, empresa o teléfono..."
-) {
-
-    OutlinedTextField(
-        value = searchQuery,
-        onValueChange = onSearchQueryChange,
-        modifier = Modifier.fillMaxWidth(),
-        placeholder = {
-            Text(
-                text = placeholder,
-                color = DevFlowColors.TextDark,
-                fontSize = 13.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        },
-        leadingIcon = {
-            Icon(
-                painter = painterResource(id = R.drawable.ic_search),
-                contentDescription = null,
-                tint = DevFlowColors.TextSecondary,
-                modifier = Modifier.size(18.dp)
-            )
-        },
-        singleLine = true,
-        shape = RoundedCornerShape(12.dp),
-        colors = devFlowTextFieldColors()
-    )
-}
-
-
-@Composable
-fun EmptyClientsCard(
-    searchActive: Boolean
-) {
-
-    DevFlowCard {
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(
-                    horizontal = 25.dp,
-                    vertical = 32.dp
-                ),
-
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-
-            Text(
-                text = if (searchActive) {
-                    "No encontramos clientes"
-                } else {
-                    "No tienes Clientes por el momento"
-                },
-
-                fontSize = 19.sp,
-
-                fontWeight = FontWeight.Bold,
-
-                color = Color.White,
-
-                textAlign = TextAlign.Center
-            )
-
-            if (searchActive) {
-
-                Spacer(
-                    modifier = Modifier.height(8.dp)
-                )
-
-                Text(
-                    text = "Prueba buscando con otro nombre.",
-                    color = DevFlowColors.TextSecondary,
-                    fontSize = 13.sp,
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
-    }
-}
-
-
-
-@Composable
-fun ClientCard(
-    client: Client,
-    projectCount: Int,
-    onClick: () -> Unit,
-    onCall: () -> Unit,
-    onMessage: () -> Unit
-) {
-
-    DevFlowCard(
-        modifier = Modifier.clickable { onClick() }
-    ) {
-
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-
-                ClientAvatar(name = client.name)
-
-                Spacer(modifier = Modifier.width(10.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-
-                    Text(
-                        text = client.name,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    Text(
-                        text = listOf(client.company, client.phone)
-                            .filter { it.isNotBlank() }
-                            .joinToString(" • ")
-                            .ifBlank { "Sin datos de contacto" },
-                        color = DevFlowColors.TextSecondary,
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                if (client.phone.isNotBlank()) {
-                    ContactIconButton(iconRes = R.drawable.ic_phone, description = "Llamar", onClick = onCall)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    ContactIconButton(iconRes = R.drawable.ic_chat, description = "Escribir", onClick = onMessage)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(DevFlowColors.DarkCard)
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = when (projectCount) {
-                        0 -> "Sin proyectos asignados"
-                        1 -> "1 proyecto asignado"
-                        else -> "$projectCount proyectos asignados"
-                    },
-                    color = if (projectCount == 0) DevFlowColors.TextSecondary else Color.White,
-                    fontSize = 12.sp,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    text = "Ver ficha →",
-                    color = DevFlowColors.Cyan,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
-    }
-}
-
-
-@Composable
-fun ContactIconButton(
-    iconRes: Int,
-    description: String,
-    onClick: () -> Unit,
-    tint: Color = DevFlowColors.Cyan
-) {
-    Box(
-        modifier = Modifier
-            .size(36.dp)
-            .clip(CircleShape)
-            .background(DevFlowColors.DarkCard)
-            .border(1.dp, DevFlowColors.Border, CircleShape)
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            painter = painterResource(id = iconRes),
-            contentDescription = description,
-            tint = tint,
-            modifier = Modifier.size(16.dp)
-        )
-    }
-}
-
-
-@Composable
-fun StatusChip(
-    text: String,
-    color: Color
-) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(color.copy(alpha = 0.15f))
-            .padding(horizontal = 8.dp, vertical = 3.dp)
-    ) {
-        Text(
-            text = "● $text",
-            style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = color),
-            maxLines = 1
-        )
-    }
-}
-
-
-@Composable
-fun EmptyStateCard(
-    title: String,
-    subtitle: String,
-    actionLabel: String? = null,
-    onAction: () -> Unit = {}
-) {
-    DevFlowCard {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 28.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = title,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = subtitle,
-                color = DevFlowColors.TextSecondary,
-                fontSize = 12.sp,
-                textAlign = TextAlign.Center,
-                lineHeight = 16.sp
-            )
-            if (actionLabel != null) {
-                Spacer(modifier = Modifier.height(14.dp))
-                Button(
-                    onClick = onAction,
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = DevFlowColors.Primary)
-                ) {
-                    Text(actionLabel, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White)
-                }
-            }
-        }
-    }
-}
-
-
-/** Barra superior con flecha de volver (apunta a la izquierda). */
-@Composable
-fun BackTopBar(
-    title: String,
-    onBackClick: () -> Unit
-) {
-    Surface(
-        color = DevFlowColors.Card,
-        border = BorderStroke(1.dp, DevFlowColors.Border)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .height(60.dp)
-                .padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBackClick) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_arrow_back),
-                    contentDescription = "Volver",
-                    tint = Color.White,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(4.dp))
-            DevFlowLogo(size = 32.dp)
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = title,
-                style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 17.sp, color = Color.White),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-
-@Composable
-fun DevFlowTextField(
-    value: String,
-    label: String,
-    onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    keyboardType: KeyboardType = KeyboardType.Text,
-    singleLine: Boolean = true,
-    minLines: Int = 1
-) {
-
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = modifier.fillMaxWidth(),
-        label = { Text(text = label) },
-        singleLine = singleLine,
-        minLines = minLines,
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-        shape = RoundedCornerShape(10.dp),
-        colors = devFlowTextFieldColors()
-    )
-}
-
-
-@Composable
-fun ClientAvatar(
-    name: String
-) {
-
-    val initials = remember(name) {
-
-        val parts = name
-            .trim()
-            .split(" ")
-            .filter { it.isNotBlank() }
-
-        when {
-
-            parts.size >= 2 ->
-                "${parts.first().take(1)}${parts.last().take(1)}"
-                    .uppercase()
-
-            parts.isNotEmpty() ->
-                parts.first()
-                    .take(2)
-                    .uppercase()
-
-            else ->
-                "CL"
-        }
-    }
-
-    Box(
-        modifier = Modifier
-            .size(42.dp)
-            .clip(CircleShape)
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        DevFlowColors.Cyan,
-                        DevFlowColors.Primary
-                    )
-                )
-            ),
-
-        contentAlignment = Alignment.Center
-    ) {
-
-        Text(
-            text = initials,
-            color = Color.White,
-            fontWeight = FontWeight.Bold
-        )
-    }
-}
-
-
-@Composable
-internal fun devFlowTextFieldColors() =
-    OutlinedTextFieldDefaults.colors(
-
-        focusedTextColor = Color.White,
-        unfocusedTextColor = Color.White,
-
-        focusedBorderColor = DevFlowColors.Primary,
-        unfocusedBorderColor = DevFlowColors.Border,
-
-        focusedLabelColor = DevFlowColors.Cyan,
-        unfocusedLabelColor = DevFlowColors.TextSecondary,
-
-        cursorColor = DevFlowColors.Cyan
-    )
-
-
-@Composable
-fun DevFlowCard(
-    modifier: Modifier = Modifier,
-    content: @Composable ColumnScope.() -> Unit
-) {
-
-    Card(
-        modifier = modifier.fillMaxWidth(),
-
-        shape = RoundedCornerShape(16.dp),
-
-        colors = CardDefaults.cardColors(
-            containerColor = DevFlowColors.Card
-        ),
-
-        border = BorderStroke(
-            1.dp,
-            DevFlowColors.Border
-        )
-    ) {
-
-        Column(
-            content = content
-        )
-    }
-}
-
-
-@Composable
-fun SmallLabel(
-    text: String,
-    color: Color = DevFlowColors.TextSecondary
-) {
-
-    Text(
-        text = text,
-        color = color,
-        fontFamily = FontFamily.Monospace,
-        fontWeight = FontWeight.Bold,
-        fontSize = 10.sp,
-        letterSpacing = 0.5.sp
-    )
-}
-
-
-
-@Composable
-fun DevFlowBottomBar(
-    selectedTab: Int,
-    onTabSelected: (Int) -> Unit
-) {
-
-    val tabs = listOf(
-        "▦" to "Dashboard",
-        "◇" to "Proyectos",
-        "▤" to "Guías",
-        "♙" to "Clientes",
-        "☷" to "Ajustes"
-    )
-
-    Surface(
-        color = DevFlowColors.DarkCard,
-
-        border = BorderStroke(
-            1.dp,
-            DevFlowColors.Border
-        )
-    ) {
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(70.dp),
-
-            horizontalArrangement = Arrangement.SpaceAround,
-
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-
-            tabs.forEachIndexed { index, item ->
-
-                val selected =
-                    selectedTab == index
-
-                val itemColor =
-                    if (selected) {
-                        DevFlowColors.Cyan
-                    } else {
-                        DevFlowColors.TextSecondary
-                    }
-
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clickable {
-                            onTabSelected(index)
-                        },
-
-                    horizontalAlignment = Alignment.CenterHorizontally,
-
-                    verticalArrangement = Arrangement.Center
-                ) {
-
-                    Text(
-                        text = item.first,
-                        color = itemColor,
-                        fontSize = 21.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    Spacer(
-                        modifier = Modifier.height(3.dp)
-                    )
-
-                    Text(
-                        text = item.second,
-                        color = itemColor,
-                        fontSize = 10.sp,
-
-                        fontWeight =
-                            if (selected) {
-                                FontWeight.Bold
-                            } else {
-                                FontWeight.Medium
-                            }
-                    )
-                }
-            }
-        }
-    }
-}
 
 
 @Preview(

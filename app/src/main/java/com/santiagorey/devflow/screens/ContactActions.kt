@@ -35,6 +35,33 @@ object ContactActions {
         launch(context, Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:${email.trim()}")), "No hay app de correo disponible.")
     }
 
+    /** Abre WhatsApp con un mensaje ya escrito (el usuario lo revisa y lo envía). */
+    fun whatsAppMessage(context: Context, phone: String, text: String) {
+        val digits = phone.filter { it.isDigit() }
+        if (digits.isBlank()) return noPhone(context)
+        launch(
+            context,
+            Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$digits?text=${Uri.encode(text)}")),
+            "No se pudo abrir WhatsApp."
+        )
+    }
+
+    /** Abre la app de correo con asunto y cuerpo ya escritos. */
+    fun emailMessage(context: Context, email: String, subject: String, body: String) {
+        if (email.isBlank()) return
+        val uri = Uri.parse("mailto:${email.trim()}?subject=${Uri.encode(subject)}&body=${Uri.encode(body)}")
+        launch(context, Intent(Intent.ACTION_SENDTO, uri), "No hay app de correo disponible.")
+    }
+
+    /** Menú del sistema para compartir el texto por cualquier app. */
+    fun share(context: Context, text: String) {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, text)
+        }
+        launch(context, Intent.createChooser(intent, "Compartir informe"), "No hay apps para compartir.")
+    }
+
     private fun launch(context: Context, intent: Intent, errorMessage: String) {
         try {
             context.startActivity(intent)

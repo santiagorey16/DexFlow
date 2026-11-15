@@ -72,7 +72,8 @@ fun ClientDetailScreen(
     onSaveClient: (Client) -> Unit = {},
     onDeleteClient: (clientId: String) -> Unit = {},
     onAssignProject: (projectId: String, clientId: String?) -> Unit = { _, _ -> },
-    onNewProjectForClient: (clientId: String) -> Unit = {}
+    onNewProjectForClient: (clientId: String) -> Unit = {},
+    reportSection: @Composable () -> Unit = {}
 ) {
     var isEditing by rememberSaveable(client?.id) { mutableStateOf(client == null) }
 
@@ -115,7 +116,8 @@ fun ClientDetailScreen(
                     onEdit = { isEditing = true },
                     onDelete = { onDeleteClient(client.id) },
                     onAssignProject = onAssignProject,
-                    onNewProject = { onNewProjectForClient(client.id) }
+                    onNewProject = { onNewProjectForClient(client.id) },
+                    reportSection = reportSection
                 )
             }
 
@@ -230,7 +232,8 @@ private fun ClientProfile(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onAssignProject: (projectId: String, clientId: String?) -> Unit,
-    onNewProject: () -> Unit
+    onNewProject: () -> Unit,
+    reportSection: @Composable () -> Unit
 ) {
     val context = LocalContext.current
     var showAssignDialog by remember { mutableStateOf(false) }
@@ -307,6 +310,9 @@ private fun ClientProfile(
             onClick = { ContactActions.email(context, client.email) }
         )
     }
+
+    // Informe de avance redactado por la IA
+    reportSection()
 
     // Proyectos del cliente
     Text(
