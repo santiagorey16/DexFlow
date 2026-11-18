@@ -74,6 +74,7 @@ import com.santiagorey.devflow.ui.theme.DevFlowTheme
 import java.time.LocalDate
 import java.time.ZoneOffset
 
+/** Opciones de stack que se pueden marcar al crear un proyecto. */
 private val stackOptions = listOf("Frontend Web", "API / Backend", "Base de Datos", "App Móvil")
 
 /**
@@ -441,6 +442,7 @@ fun ProjectDetailScreen(
                 override fun isSelectableDate(utcTimeMillis: Long): Boolean =
                     utcTimeMillis >= todayUtcMillis
 
+                /** El calendario solo deja elegir este año o los siguientes. */
                 override fun isSelectableYear(year: Int): Boolean =
                     year >= LocalDate.now().year
             }
@@ -490,6 +492,7 @@ fun ProjectDetailScreen(
     }
 }
 
+/** Tarjeta de un paso del formulario ("PASO 1 · Información"…), con un botón opcional arriba a la derecha. */
 @Composable
 private fun WizardStepCard(
     iconRes: Int,
@@ -544,6 +547,7 @@ private fun WizardStepCard(
     }
 }
 
+/** Etiqueta encima de un campo del formulario. */
 @Composable
 private fun FieldLabel(text: String) {
     Text(text, style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = DevFlowColors.TextSecondary))
@@ -582,6 +586,7 @@ private fun PickerField(
     }
 }
 
+/** Opción del punto de partida (Análisis, Diseño o Código): define el avance inicial del proyecto. */
 @Composable
 private fun StartingPointOption(
     selected: Boolean,

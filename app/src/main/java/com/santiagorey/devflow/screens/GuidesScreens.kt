@@ -49,6 +49,11 @@ import com.google.firebase.auth.FirebaseUser
 import com.santiagorey.devflow.R
 import com.santiagorey.devflow.ui.theme.DevFlowTheme
 
+/**
+ * Pestaña Guías: guías de buenas prácticas, plantillas para copiar, el reto/ruta de aprendizaje
+ * ([learningCard]) y la auditoría de repositorios ([auditCard]).
+ * Esas dos tarjetas llegan como slots para que esta pantalla no dependa del AssistantViewModel.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun GuidesScreens(
@@ -189,6 +194,7 @@ fun GuidesScreens(
     }
 }
 
+/** Una guía de buenas prácticas (texto fijo de la app). */
 private data class Guide(
     val tag: String,
     val tagColor: Color,
@@ -200,6 +206,7 @@ private data class Guide(
     val details: String
 )
 
+/** Lista de guías que se muestran en la pestaña. */
 private val guides = listOf(
     Guide(
         tag = "OBLIGATORIO",
@@ -244,6 +251,7 @@ private val guides = listOf(
 )
 
 
+/** Tarjeta de una guía; se expande al tocarla y tiene "Preguntar a la IA". */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun GuideCard(guide: Guide, onAskAi: (String) -> Unit) {
@@ -310,6 +318,7 @@ private fun GuideCard(guide: Guide, onAskAi: (String) -> Unit) {
     }
 }
 
+/** Tarjeta de una plantilla (README, .gitignore…) con botón para copiarla. */
 @Composable
 private fun TemplateCard(template: GuideTemplate, onCopy: () -> Unit) {
     var expanded by remember { mutableStateOf(false) }
@@ -361,6 +370,7 @@ private fun TemplateCard(template: GuideTemplate, onCopy: () -> Unit) {
     }
 }
 
+/** Copia el texto al portapapeles del teléfono y muestra un aviso. */
 private fun copyToClipboard(context: Context, label: String, text: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     clipboard.setPrimaryClip(ClipData.newPlainText(label, text))

@@ -11,6 +11,7 @@ enum class MentorMode(val label: String, val description: String) {
     SENIOR("Senior", "Respuestas directas y técnicas");
 
     companion object {
+        /** Modo guardado → MentorMode (Junior si no hay ninguno). */
         fun fromName(name: String?) = entries.firstOrNull { it.name == name } ?: JUNIOR
     }
 }

@@ -59,6 +59,11 @@ import com.santiagorey.devflow.projects.formatDeliveryDate
 import com.santiagorey.devflow.projects.projectPhases
 import com.santiagorey.devflow.ui.theme.DevFlowTheme
 
+/**
+ * Pestaña Proyectos: lista con buscador y filtro por fase.
+ * La búsqueda y el filtro usan rememberSaveable (no se pierden al girar el teléfono)
+ * y la lista se ordena por fecha de entrega (los que no tienen fecha van al final).
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ProyectScreens(
@@ -77,6 +82,7 @@ fun ProyectScreens(
     // -1 = Todos; 0..4 = índice de fase
     var selectedPhase by rememberSaveable { mutableIntStateOf(-1) }
 
+    /** Busca el cliente asignado a un proyecto (o null si no tiene). */
     fun clientOf(project: Project) = clients.firstOrNull { it.id == project.clientId }
 
     val filteredProjects = projects
@@ -266,6 +272,7 @@ fun ProyectScreens(
 
 }
 
+/** Chip de filtro (p. ej. una fase). Se resalta cuando [selected] es true. */
 @Composable
 internal fun FilterChipBox(text: String, selected: Boolean, onClick: () -> Unit) {
     Box(
@@ -280,6 +287,7 @@ internal fun FilterChipBox(text: String, selected: Boolean, onClick: () -> Unit)
     }
 }
 
+/** Tarjeta de un proyecto en la lista: fase, avance, entrega, stack y cliente. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ProjectCardItem(

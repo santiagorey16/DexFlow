@@ -87,6 +87,7 @@ fun AiSetupScreen(
         if (setup.testedProvider != null && setup.testedProvider == provider) step = 3
     }
 
+    /** Abre una página en el navegador (por ejemplo, donde se crea la clave). */
     fun openUrl(url: String) {
         try {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
@@ -258,8 +259,10 @@ fun AiSetupScreen(
     }
 }
 
+/** Máximo de modelos que se muestran para elegir. */
 private const val MAX_MODELS_SHOWN = 25
 
+/** Barra de progreso del tutorial (paso actual de los totales). */
 @Composable
 private fun StepIndicator(current: Int, total: Int) {
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
@@ -275,6 +278,7 @@ private fun StepIndicator(current: Int, total: Int) {
     }
 }
 
+/** Encabezado de cada paso: número, título y explicación. */
 @Composable
 private fun SetupHeader(step: String, title: String, subtitle: String) {
     Column {
@@ -286,6 +290,7 @@ private fun SetupHeader(step: String, title: String, subtitle: String) {
     }
 }
 
+/** Tarjeta para elegir una IA (Gemini, Claude o ChatGPT); se resalta la elegida. */
 @Composable
 private fun ProviderOptionCard(provider: AiProvider, selected: Boolean, onClick: () -> Unit) {
     Row(
@@ -319,6 +324,7 @@ private fun ProviderOptionCard(provider: AiProvider, selected: Boolean, onClick:
     }
 }
 
+/** Paso numerado de las instrucciones para conseguir la clave. */
 @Composable
 private fun NumberedStep(number: Int, text: String) {
     Row(verticalAlignment = Alignment.Top) {
@@ -336,6 +342,7 @@ private fun NumberedStep(number: Int, text: String) {
     }
 }
 
+/** Nota informativa con fondo suave. */
 @Composable
 internal fun InfoNote(text: String) {
     Row(
@@ -349,6 +356,7 @@ internal fun InfoNote(text: String) {
     }
 }
 
+/** Botón principal del tutorial; muestra una rueda mientras [loading]. */
 @Composable
 private fun PrimaryButton(text: String, enabled: Boolean = true, loading: Boolean = false, onClick: () -> Unit) {
     Button(

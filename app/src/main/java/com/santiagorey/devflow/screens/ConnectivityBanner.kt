@@ -37,7 +37,9 @@ fun rememberIsOnline(): Boolean {
     }
     DisposableEffect(manager) {
         val callback = object : ConnectivityManager.NetworkCallback() {
+            /** Android avisa que volvió una red con internet. */
             override fun onAvailable(network: Network) { online = true }
+            /** Se perdió una red: se revisa si queda otra con internet (por ejemplo, de wifi a datos). */
             override fun onLost(network: Network) {
                 online = manager.getNetworkCapabilities(manager.activeNetwork)
                     ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true

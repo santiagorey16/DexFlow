@@ -24,6 +24,7 @@ import com.santiagorey.devflow.projects.Client
 
 // Tarjetas, avatar y botones de contacto de los clientes.
 
+/** Tarjeta para cuando no hay clientes, o la búsqueda no encontró ninguno ([searchActive]). */
 @Composable
 fun EmptyClientsCard(
     searchActive: Boolean
@@ -75,6 +76,10 @@ fun EmptyClientsCard(
     }
 }
 
+/**
+ * Tarjeta de un cliente en la lista: avatar, nombre, empresa, número de proyectos
+ * y botones rápidos para llamar y escribir.
+ */
 @Composable
 fun ClientCard(
     client: Client,
@@ -163,6 +168,7 @@ fun ClientCard(
     }
 }
 
+/** Botón redondo con icono (llamar, mensaje…). */
 @Composable
 fun ContactIconButton(
     iconRes: Int,
@@ -188,6 +194,10 @@ fun ContactIconButton(
     }
 }
 
+/**
+ * Círculo con las iniciales del cliente sobre un degradado cyan–morado.
+ * Las iniciales se calculan con remember(name): solo cambian si cambia el nombre.
+ */
 @Composable
 fun ClientAvatar(
     name: String

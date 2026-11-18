@@ -41,31 +41,57 @@ import com.santiagorey.devflow.screens.PREF_QUALITY_ALERTS
 import com.santiagorey.devflow.screens.rememberBooleanPreference
 import com.santiagorey.devflow.ui.theme.DevFlowTheme
 
+/**
+ * Única Activity de la app: todas las pantallas son composables que viven adentro.
+ *
+ * Se encarga de:
+ * - Arrancar la app (splash, canal de notificaciones, recordatorios en segundo plano).
+ * - Crear los 3 ViewModels y conectarlos entre sí (cuando cambia el usuario, avisa a los demás).
+ * - Elegir la primera pantalla: Dashboard si hay sesión, Login si no.
+ * - Calcular lo que comparten varias pantallas (avisos de la campana, coach del día, conexión).
+ * - Mostrar [DevFlowNavHost], que tiene todas las pantallas.
+ */
 class MainActivity : ComponentActivity() {
 
-    /** Pantalla a abrir cuando se toca una notificación (p. ej. "notifications"). */
+    /**
+     * Pantalla a abrir cuando se toca una notificación (p. ej. "notifications").
+     * Es estado de Compose (`mutableStateOf`): al cambiar, el LaunchedEffect que lo lee navega solo.
+     */
     private var pendingOpen by mutableStateOf<String?>(null)
 
+    /** Llega aquí si la app YA estaba abierta y se toca una notificación. */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         pendingOpen = intent.getStringExtra(DevFlowNotifications.EXTRA_OPEN)
     }
 
+    /** Lo primero que ejecuta Android al abrir la app. */
     override fun onCreate(savedInstanceState: Bundle?) {
         // Pantalla de inicio: fondo negro con el logo (debe ir antes de super.onCreate).
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        // La app dibuja de borde a borde (también detrás de la hora y la batería).
         enableEdgeToEdge()
+        // Si la app estaba cerrada y se abrió desde una notificación, aquí viene a qué pantalla ir.
         pendingOpen = intent?.getStringExtra(DevFlowNotifications.EXTRA_OPEN)
+        // Android 8+ exige un "canal" para mostrar notificaciones (si ya existe, no pasa nada).
         DevFlowNotifications.createChannel(this)
+        // Revisión de entregas y CI cada 6 h, aunque la app esté cerrada (no se duplica: usa KEEP).
         ReminderWorker.schedule(this)
 
+        // Desde aquí todo es Jetpack Compose.
         setContent {
             DevFlowTheme {
+                // "Control remoto" de la navegación. remember = el mismo en cada redibujado
+                // (si se creara uno nuevo, se perdería la pila de pantallas).
                 val navController = rememberNavController()
+                // viewModel() los crea la primera vez y devuelve los mismos después
+                // (por ejemplo al girar el teléfono), así no se pierden los datos.
                 val authViewModel: AuthViewModel = viewModel()
                 val projectsViewModel: ProjectsViewModel = viewModel()
                 val assistantViewModel: AssistantViewModel = viewModel()
+                // El estado de sesión llega como StateFlow; collectAsState lo vuelve estado de Compose
+                // para que esta parte se redibuje cuando alguien inicia o cierra sesión.
                 val uiState by authViewModel.uiState.collectAsState()
                 val context = LocalContext.current
 
@@ -74,6 +100,11 @@ class MainActivity : ComponentActivity() {
                     if (uiState.isAuthenticated) Routes.DASHBOARD else Routes.LOGIN
                 }
 
+                /**
+                 * Navegación de la barra inferior (0 Dashboard … 4 Ajustes).
+                 * La pila queda siempre corta: Dashboard → pestaña actual. Así "atrás" desde cualquier
+                 * pestaña lleva al Dashboard, y desde el Dashboard sale de la app.
+                 */
                 fun navigateToTab(tabIndex: Int) {
                     val route = when (tabIndex) {
                         0 -> Routes.DASHBOARD
@@ -83,6 +114,7 @@ class MainActivity : ComponentActivity() {
                         4 -> Routes.SETTINGS
                         else -> Routes.DASHBOARD
                     }
+                    // Ya estás en esa pestaña: no hace nada.
                     if (navController.currentDestination?.route == route) return
 
                     if (route == Routes.DASHBOARD) {
@@ -99,11 +131,15 @@ class MainActivity : ComponentActivity() {
                     }
 
                     navController.navigate(route) {
-                        popUpTo(Routes.DASHBOARD) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
+                        popUpTo(Routes.DASHBOARD) { saveState = true } // saca lo de encima del Dashboard y guarda su estado
+                        launchSingleTop = true                          // no abre dos copias de la misma pestaña
+                        restoreState = true                             // recupera scroll y filtros si ya la visitaste
                     }
                 }
+
+                // ── Conectar los ViewModels ──
+                // Los ViewModels no se conocen entre sí: MainActivity les avisa cuando cambia el usuario.
+                // dataKey es el uid de Firebase (null sin sesión); el efecto se repite cada vez que cambia.
 
                 // Carga los proyectos/clientes de la cuenta activa
                 // (se sincronizan con Firestore)
@@ -127,7 +163,8 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // Toast Feedback for error/success messages
+                // Mensajes de error o éxito del login y de Ajustes: se muestran una vez y se borran
+                // (clearMessages) para que no vuelvan a salir al redibujar.
                 LaunchedEffect(uiState.errorMessage, uiState.successMessage) {
                     uiState.errorMessage?.let {
                         Toast.makeText(context, it, Toast.LENGTH_LONG).show()
@@ -150,6 +187,8 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                // Cerrar sesión: también borra la copia de proyectos que usan los recordatorios,
+                // para no avisar de proyectos de la cuenta anterior.
                 val logout: () -> Unit = {
                     AlertCache.clear(context)
                     authViewModel.logout()
@@ -204,6 +243,8 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                // Número de avisos y acción de la campana. Llega a todas las pestañas con
+                // CompositionLocalProvider (más abajo), sin pasarlo como parámetro pantalla por pantalla.
                 val bellState = NotificationBellState(
                     count = alerts.size,
                     onClick = { navController.navigate(Routes.NOTIFICATIONS) { launchSingleTop = true } }
@@ -211,6 +252,7 @@ class MainActivity : ComponentActivity() {
 
                 // ── Coach diario: consejo de la IA sobre el proyecto destacado ──
                 val coachEnabled by rememberBooleanPreference(PREF_COACH_LIVE, true)
+                // Proyecto destacado: el activo con la entrega más próxima; si ninguno tiene fecha, el primero.
                 val focusProject by remember {
                     derivedStateOf {
                         projectsViewModel.projects
@@ -227,8 +269,10 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                // true/false según haya internet; se actualiza solo (ver ConnectivityBanner.kt).
                 val isOnline = rememberIsOnline()
 
+                // Dibujo final: todas las pantallas (DevFlowNavHost) y, encima, la franja "sin conexión".
                 CompositionLocalProvider(LocalNotificationBell provides bellState) {
                     Box(modifier = Modifier.fillMaxSize()) {
                         DevFlowNavHost(

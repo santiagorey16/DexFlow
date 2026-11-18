@@ -52,6 +52,7 @@ class ProjectsViewModel(application: Application) : AndroidViewModel(application
     var syncError by mutableStateOf<String?>(null)
         private set
 
+    /** La pantalla ya mostró el error: se borra para no repetirlo. */
     fun clearSyncError() {
         syncError = null
     }
@@ -86,6 +87,7 @@ class ProjectsViewModel(application: Application) : AndroidViewModel(application
         isLoaded = true
     }
 
+    /** El ViewModel se destruye: se quitan los listeners de Firestore. */
     override fun onCleared() {
         super.onCleared()
         stopSync()
@@ -95,6 +97,10 @@ class ProjectsViewModel(application: Application) : AndroidViewModel(application
     // PROYECTOS
     // =====================================================
 
+    /**
+     * Crea un proyecto: aparece al instante en la lista y se envía a Firestore
+     * (actualización optimista). También registra la actividad.
+     */
     fun addProject(project: Project): Project {
         projects.add(0, project)
         writeProject(project)
@@ -103,6 +109,7 @@ class ProjectsViewModel(application: Application) : AndroidViewModel(application
         return project
     }
 
+    /** Busca un proyecto por su id (null si no existe o se borró). */
     fun getProject(id: String): Project? = projects.firstOrNull { it.id == id }
 
     /** Guarda los cambios hechos desde "Editar proyecto" (conserva avance y fecha de creación). */
@@ -115,6 +122,7 @@ class ProjectsViewModel(application: Application) : AndroidViewModel(application
         persistLocal()
     }
 
+    /** Cambia el avance manual (0–100). Registra "completado" si llega a 100. */
     fun updateProgress(projectId: String, progress: Int) {
         val index = projects.indexOfFirst { it.id == projectId }
         if (index == -1) return
@@ -132,6 +140,7 @@ class ProjectsViewModel(application: Application) : AndroidViewModel(application
         persistLocal()
     }
 
+    /** Borra el proyecto de la lista y de Firestore. */
     fun deleteProject(projectId: String) {
         val project = getProject(projectId) ?: return
         projects.removeAll { it.id == projectId }
@@ -140,6 +149,7 @@ class ProjectsViewModel(application: Application) : AndroidViewModel(application
         persistLocal()
     }
 
+    /** Asigna un cliente al proyecto, o lo quita con clientId = null. */
     fun assignClientToProject(projectId: String, clientId: String?) {
         val index = projects.indexOfFirst { it.id == projectId }
         if (index == -1) return
@@ -157,17 +167,20 @@ class ProjectsViewModel(application: Application) : AndroidViewModel(application
     // TAREAS (el avance se calcula con las tareas completadas)
     // =====================================================
 
+    /** Agrega una tarea a una fase (ignora títulos vacíos). */
     fun addTask(projectId: String, title: String, phaseIndex: Int) {
         val clean = title.trim()
         if (clean.isEmpty()) return
         updateTasks(projectId) { it + ProjectTask(title = clean, phaseIndex = phaseIndex.coerceIn(0, 3)) }
     }
 
+    /** Agrega varias tareas de una vez (las sugeridas por la IA). */
     fun addTasks(projectId: String, newTasks: List<ProjectTask>) {
         if (newTasks.isEmpty()) return
         updateTasks(projectId) { it + newTasks }
     }
 
+    /** Marca una tarea como hecha, o la devuelve a "Por hacer". */
     fun toggleTask(projectId: String, taskId: String) = updateTask(projectId, taskId) {
         it.withStatus(if (it.done) TaskStatus.TODO else TaskStatus.DONE)
     }
@@ -176,10 +189,13 @@ class ProjectsViewModel(application: Application) : AndroidViewModel(application
     fun setTaskStatus(projectId: String, taskId: String, status: TaskStatus) =
         updateTask(projectId, taskId) { it.withStatus(status) }
 
+    /** Inicia el cronómetro de una tarea. */
     fun startTaskTimer(projectId: String, taskId: String) = updateTask(projectId, taskId) { it.startTimer() }
 
+    /** Detiene el cronómetro de una tarea. */
     fun stopTaskTimer(projectId: String, taskId: String) = updateTask(projectId, taskId) { it.stopTimer() }
 
+    /** Guarda el número del issue de GitHub creado para la tarea. */
     fun linkTaskIssue(projectId: String, taskId: String, issueNumber: Int) =
         updateTask(projectId, taskId) { it.copy(issueNumber = issueNumber) }
 
@@ -193,13 +209,20 @@ class ProjectsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /** Cambia UNA tarea aplicándole [transform] (atajo de updateTasks). */
     private fun updateTask(projectId: String, taskId: String, transform: (ProjectTask) -> ProjectTask) =
         updateTasks(projectId) { tasks -> tasks.map { if (it.id == taskId) transform(it) else it } }
 
+    /** Borra una tarea. */
     fun deleteTask(projectId: String, taskId: String) {
         updateTasks(projectId) { tasks -> tasks.filterNot { it.id == taskId } }
     }
 
+    /**
+     * Punto común de todos los cambios de tareas: aplica [transform], recalcula el avance
+     * con las tareas, guarda en Firestore y registra si el proyecto se completó.
+     * Si nada cambió, no hace nada (evita escrituras de más).
+     */
     private fun updateTasks(projectId: String, transform: (List<ProjectTask>) -> List<ProjectTask>) {
         val index = projects.indexOfFirst { it.id == projectId }
         if (index == -1) return
@@ -230,6 +253,7 @@ class ProjectsViewModel(application: Application) : AndroidViewModel(application
         persistLocal()
     }
 
+    /** Proyectos asignados a un cliente. */
     fun projectsForClient(clientId: String): List<Project> =
         projects.filter { it.clientId == clientId }
 
@@ -237,6 +261,7 @@ class ProjectsViewModel(application: Application) : AndroidViewModel(application
     // CLIENTES
     // =====================================================
 
+    /** Crea un cliente (al instante en la lista y luego en Firestore). */
     fun addClient(client: Client): Client {
         clients.add(0, client)
         writeClient(client)
@@ -245,6 +270,7 @@ class ProjectsViewModel(application: Application) : AndroidViewModel(application
         return client
     }
 
+    /** Guarda los cambios de un cliente. */
     fun updateClient(client: Client) {
         val index = clients.indexOfFirst { it.id == client.id }
         if (index == -1) return
@@ -253,8 +279,10 @@ class ProjectsViewModel(application: Application) : AndroidViewModel(application
         persistLocal()
     }
 
+    /** Busca un cliente por su id. */
     fun getClient(id: String): Client? = clients.firstOrNull { it.id == id }
 
+    /** Borra un cliente. Sus proyectos NO se borran: solo quedan sin cliente. */
     fun deleteClient(clientId: String) {
         val client = getClient(clientId) ?: return
         clients.removeAll { it.id == clientId }
@@ -282,6 +310,7 @@ class ProjectsViewModel(application: Application) : AndroidViewModel(application
     // ACTIVIDAD
     // =====================================================
 
+    /** Registra una acción en la actividad reciente y borra las más viejas (solo se guardan 20). */
     private fun log(type: ActivityType, text: String) {
         val entry = ActivityEntry(type = type, text = text)
         activity.add(0, entry)
@@ -298,22 +327,31 @@ class ProjectsViewModel(application: Application) : AndroidViewModel(application
     // FIRESTORE
     // =====================================================
 
+    /** Referencia a users/{uid}/{name} en Firestore. */
     private fun userCollection(uid: String, name: String): CollectionReference =
         firestore.collection("users").document(uid).collection(name)
 
+    /** Colección de la cuenta activa, o null sin sesión (entonces no se escribe en la nube). */
     private fun remoteCollection(name: String): CollectionReference? =
         remoteUid?.let { userCollection(it, name) }
 
+    /** Guarda (o reemplaza) el proyecto en Firestore. Sin internet, queda en cola. */
     private fun writeProject(project: Project) {
         remoteCollection(PROJECTS)?.document(project.id)?.set(project.toMap())
             ?.addOnFailureListener(::onSyncFailure)
     }
 
+    /** Guarda (o reemplaza) el cliente en Firestore. */
     private fun writeClient(client: Client) {
         remoteCollection(CLIENTS)?.document(client.id)?.set(client.toMap())
             ?.addOnFailureListener(::onSyncFailure)
     }
 
+    /**
+     * Escucha en vivo proyectos, clientes y actividad de la cuenta.
+     * Cada cambio (también desde otro teléfono) reemplaza la lista y Compose redibuja.
+     * uid != remoteUid descarta respuestas tardías de una cuenta anterior.
+     */
     private fun startSync(uid: String) {
         listeners += userCollection(uid, PROJECTS).addSnapshotListener { snapshot, error ->
             if (error != null) return@addSnapshotListener onSyncFailure(error)
@@ -339,6 +377,7 @@ class ProjectsViewModel(application: Application) : AndroidViewModel(application
             }
     }
 
+    /** Deja de escuchar Firestore (al cambiar de cuenta o al destruirse el ViewModel). */
     private fun stopSync() {
         listeners.forEach { it.remove() }
         listeners.clear()
@@ -367,6 +406,7 @@ class ProjectsViewModel(application: Application) : AndroidViewModel(application
             .addOnFailureListener(::onSyncFailure)
     }
 
+    /** Traduce el error de Firestore a un mensaje que la pantalla muestra en un Toast. */
     private fun onSyncFailure(error: Exception) {
         Log.e(TAG, "Error de sincronización con Firestore", error)
         val code = (error as? FirebaseFirestoreException)?.code
@@ -384,6 +424,7 @@ class ProjectsViewModel(application: Application) : AndroidViewModel(application
     // ALMACENAMIENTO LOCAL (datos de versiones anteriores, se migran a Firestore)
     // =====================================================
 
+    /** Guarda los datos en el teléfono (solo en modo sin cuenta; con cuenta se usa Firestore). */
     private fun persistLocal() {
         if (remoteUid != null) return
         val key = userKey ?: return
@@ -395,6 +436,7 @@ class ProjectsViewModel(application: Application) : AndroidViewModel(application
         prefs.edit { putString(localKey(key), root.toString()) }
     }
 
+    /** Lee los datos guardados en el teléfono. */
     private fun loadLocal(key: String) {
         val raw = prefs.getString(localKey(key), null) ?: return
         runCatching { parseLocal(raw) }.getOrNull()?.let { data ->
@@ -404,6 +446,7 @@ class ProjectsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /** Convierte el JSON guardado en listas de proyectos, clientes y actividad. */
     private fun parseLocal(raw: String): LocalData {
         val root = JSONObject(raw)
         val p = mutableListOf<Project>()
@@ -415,8 +458,10 @@ class ProjectsViewModel(application: Application) : AndroidViewModel(application
         return LocalData(p, c, a)
     }
 
+    /** Clave de los datos locales de cada cuenta. */
     private fun localKey(key: String) = "data_$key"
 
+    /** Datos leídos del almacenamiento local. */
     private class LocalData(
         val projects: List<Project>,
         val clients: List<Client>,

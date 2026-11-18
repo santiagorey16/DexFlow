@@ -29,6 +29,7 @@ import com.santiagorey.devflow.R
 // AVATAR DE PERFIL
 // =====================================================
 
+/** Círculo con la foto de perfil (se descarga con Coil: AsyncImage) o, si no hay foto, las iniciales. */
 @Composable
 fun ProfileAvatar(
     photoUrl: String? = null,
@@ -119,6 +120,10 @@ fun ProfileAvatar(
     }
 }
 
+/**
+ * Encabezado de las pestañas: logo, sección actual, campana de avisos y menú del perfil.
+ * La campana la lee de [LocalNotificationBell], que provee MainActivity.
+ */
 @Composable
 fun TopHeaderBar(
     currentUser: FirebaseUser? = null,
@@ -301,8 +306,13 @@ data class NotificationBellState(
     val onClick: (() -> Unit)? = null
 )
 
+/**
+ * "Ambiente" de Compose con el estado de la campana: cualquier pantalla lo lee con
+ * LocalNotificationBell.current sin recibirlo como parámetro.
+ */
 val LocalNotificationBell = compositionLocalOf { NotificationBellState() }
 
+/** Encabezado de la pestaña Clientes: título, cuántos clientes y proyectos hay y botón para agregar. */
 @Composable
 fun HeaderSection(
     clientCount: Int,

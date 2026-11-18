@@ -36,6 +36,10 @@ import java.util.concurrent.TimeUnit
  */
 class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
+    /**
+     * Lo ejecuta Android cada ~6 h: lee la copia de proyectos, consulta el CI y notifica
+     * los avisos que no se mandaron hoy.
+     */
     override suspend fun doWork(): Result {
         val cache = AlertCache.read(applicationContext) ?: return Result.success()
         val ciRuns = if (cache.qualityAlerts && cache.uid != null) {
@@ -65,6 +69,7 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
                 .enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
         }
 
+        /** Cancela los recordatorios. */
         fun cancel(context: Context) = WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
     }
 }
@@ -74,8 +79,10 @@ object AlertCache {
     private const val PREFS = "devflow_alert_cache"
     private const val KEY = "cache"
 
+    /** Lo que necesita el worker: usuario, si las alertas de calidad están activas y los proyectos. */
     class Snapshot(val uid: String?, val qualityAlerts: Boolean, val projects: List<Project>)
 
+    /** Guarda solo los proyectos activos con lo mínimo (nombre, avance, entrega, repo). */
     fun save(context: Context, uid: String?, qualityAlerts: Boolean, projects: List<Project>) {
         val array = JSONArray()
         projects.filter { !it.isCompleted }.forEach { p ->
@@ -92,8 +99,10 @@ object AlertCache {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { putString(KEY, root.toString()) }
     }
 
+    /** Borra la copia (al cerrar sesión). */
     fun clear(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { clear() }
 
+    /** Lee la copia guardada (null si no hay o está dañada). */
     fun read(context: Context): Snapshot? {
         val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null) ?: return null
         return runCatching {
@@ -121,6 +130,7 @@ object DevFlowNotifications {
     const val EXTRA_OPEN = "open"
     const val OPEN_NOTIFICATIONS = "notifications"
 
+    /** Crea el canal "Entregas y alertas" (obligatorio desde Android 8). */
     fun createChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val channel = NotificationChannel(CHANNEL_ID, "Entregas y alertas", NotificationManager.IMPORTANCE_DEFAULT).apply {
@@ -129,6 +139,7 @@ object DevFlowNotifications {
         context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
+    /** true si se pueden mostrar notificaciones (Android 13+ pide permiso). */
     fun canNotify(context: Context): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED

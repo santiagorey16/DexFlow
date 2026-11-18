@@ -8,6 +8,7 @@ import org.json.JSONObject
 // Firestore (sesión con cuenta real)
 // =====================================================
 
+/** Proyecto → mapa clave-valor, que es lo que guarda Firestore. */
 internal fun Project.toMap(): Map<String, Any?> = mapOf(
     "name" to name,
     "description" to description,
@@ -34,6 +35,7 @@ internal fun ProjectTask.toMap(): Map<String, Any?> = mapOf(
     "issue" to issueNumber
 )
 
+/** Mapa de Firestore o JSON → tarea. Devuelve null si falta el título (dato roto). */
 internal fun taskFromMap(map: Map<*, *>): ProjectTask? {
     val title = map["title"] as? String ?: return null
     return ProjectTask(
@@ -48,12 +50,18 @@ internal fun taskFromMap(map: Map<*, *>): ProjectTask? {
     )
 }
 
+/** Lista guardada → tareas, descartando las inválidas. */
 private fun Any?.toTasks(): List<ProjectTask> =
     (this as? List<*>)?.mapNotNull { (it as? Map<*, *>)?.let(::taskFromMap) } ?: emptyList()
 
+/** JSONObject → mapa (para reutilizar taskFromMap con datos locales). */
 private fun JSONObject.toMap(): Map<String, Any?> =
     keys().asSequence().associateWith { key -> opt(key).takeUnless { it == JSONObject.NULL } }
 
+/**
+ * Documento de Firestore → proyecto. null si no tiene nombre.
+ * Cada campo trae un valor por defecto, así los documentos viejos se siguen leyendo.
+ */
 internal fun DocumentSnapshot.toProject(): Project? {
     val name = getString("name") ?: return null
     return Project(
@@ -72,6 +80,7 @@ internal fun DocumentSnapshot.toProject(): Project? {
     )
 }
 
+/** Cliente → mapa para Firestore. */
 internal fun Client.toMap(): Map<String, Any?> = mapOf(
     "name" to name,
     "phone" to phone,
@@ -81,6 +90,7 @@ internal fun Client.toMap(): Map<String, Any?> = mapOf(
     "createdAt" to createdAt
 )
 
+/** Documento de Firestore → cliente (null si no tiene nombre). */
 internal fun DocumentSnapshot.toClient(): Client? {
     val name = getString("name") ?: return null
     return Client(
@@ -94,12 +104,14 @@ internal fun DocumentSnapshot.toClient(): Client? {
     )
 }
 
+/** Entrada de actividad → mapa para Firestore. */
 internal fun ActivityEntry.toMap(): Map<String, Any?> = mapOf(
     "type" to type.name,
     "text" to text,
     "timestamp" to timestamp
 )
 
+/** Documento de Firestore → entrada de actividad. */
 internal fun DocumentSnapshot.toActivity(): ActivityEntry? {
     val text = getString("text") ?: return null
     return ActivityEntry(
@@ -114,10 +126,12 @@ internal fun DocumentSnapshot.toActivity(): ActivityEntry? {
 // JSON (datos que versiones anteriores guardaban solo en el teléfono)
 // =====================================================
 
+/** Recorre un JSONArray objeto por objeto. */
 internal inline fun JSONArray.forEachObject(block: (JSONObject) -> Unit) {
     for (i in 0 until length()) optJSONObject(i)?.let(block)
 }
 
+/** Proyecto → JSON (formato antiguo guardado solo en el teléfono). */
 internal fun Project.toJson() = JSONObject().apply {
     put("id", id)
     put("name", name)
@@ -133,6 +147,7 @@ internal fun Project.toJson() = JSONObject().apply {
     put("tasks", JSONArray().apply { tasks.forEach { put(JSONObject(it.toMap().filterValues { v -> v != null })) } })
 }
 
+/** JSON del formato antiguo → proyecto. */
 internal fun JSONObject.toProject() = Project(
     id = getString("id"),
     name = getString("name"),
@@ -150,6 +165,7 @@ internal fun JSONObject.toProject() = Project(
     } ?: emptyList()
 )
 
+/** Cliente → JSON (formato antiguo). */
 internal fun Client.toJson() = JSONObject().apply {
     put("id", id)
     put("name", name)
@@ -160,6 +176,7 @@ internal fun Client.toJson() = JSONObject().apply {
     put("createdAt", createdAt)
 }
 
+/** JSON del formato antiguo → cliente. */
 internal fun JSONObject.toClient() = Client(
     id = getString("id"),
     name = getString("name"),
@@ -170,6 +187,7 @@ internal fun JSONObject.toClient() = Client(
     createdAt = optLong("createdAt", System.currentTimeMillis())
 )
 
+/** Actividad → JSON (formato antiguo). */
 internal fun ActivityEntry.toJson() = JSONObject().apply {
     put("id", id)
     put("type", type.name)
@@ -177,6 +195,7 @@ internal fun ActivityEntry.toJson() = JSONObject().apply {
     put("timestamp", timestamp)
 }
 
+/** JSON del formato antiguo → actividad. */
 internal fun JSONObject.toActivity() = ActivityEntry(
     id = getString("id"),
     type = activityTypeOf(optString("type")),
@@ -184,5 +203,6 @@ internal fun JSONObject.toActivity() = ActivityEntry(
     timestamp = optLong("timestamp")
 )
 
+/** Texto guardado → tipo de actividad (PROJECT si no se reconoce). */
 private fun activityTypeOf(name: String?): ActivityType =
     ActivityType.entries.firstOrNull { it.name == name } ?: ActivityType.PROJECT

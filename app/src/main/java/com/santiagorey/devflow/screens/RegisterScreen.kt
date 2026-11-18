@@ -27,6 +27,11 @@ import com.santiagorey.devflow.R
 import com.santiagorey.devflow.ui.theme.DevFlowTheme
 
 
+/**
+ * Pantalla de crear cuenta: nombre, correo, contraseña y confirmación.
+ * Valida cada campo y muestra el error debajo del campo que falló.
+ * Si todo está bien, llama a [onRegisterClick] (el AuthViewModel crea la cuenta en Firebase).
+ */
 @Composable
 fun RegisterScreen(
     isLoading: Boolean,
@@ -53,6 +58,10 @@ fun RegisterScreen(
 
     val keyboardController = LocalSoftwareKeyboardController.current
 
+    /**
+     * Revisa los 4 campos, guarda un mensaje de error por cada uno que falle
+     * y solo si todos están bien oculta el teclado y registra.
+     */
     fun validateAndRegister() {
         nameError = if (name.isBlank()) "Ingresa tu nombre." else null
         emailError = when {

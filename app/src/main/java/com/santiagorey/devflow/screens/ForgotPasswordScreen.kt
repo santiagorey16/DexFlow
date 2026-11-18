@@ -31,6 +31,10 @@ import com.santiagorey.devflow.R
 import com.santiagorey.devflow.ui.theme.DevFlowTheme
 
 
+/**
+ * Pantalla "Recuperar contraseña": pide el correo y Firebase envía un enlace para cambiarla.
+ * [successMessage] llega del AuthViewModel cuando el correo se envió.
+ */
 @Composable
 fun ForgotPasswordScreen(
     isLoading: Boolean,
@@ -43,6 +47,7 @@ fun ForgotPasswordScreen(
     var emailError by remember { mutableStateOf<String?>(null) }
     val keyboardController = LocalSoftwareKeyboardController.current
 
+    /** Valida el correo (vacío o con formato inválido) y, si está bien, pide el enlace. */
     fun sendResetEmail() {
         val cleanEmail = email.trim()
         emailError = when {

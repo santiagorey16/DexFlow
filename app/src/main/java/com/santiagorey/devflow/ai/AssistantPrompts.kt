@@ -81,14 +81,17 @@ internal object AssistantPrompts {
                 " (es muy largo: se envían los primeros ${MAX_ATTACHMENT_CHARS / 1000} mil caracteres de ${content.length / 1000} mil)"
         }
 
+    /** Pedido para revisar un archivo del repo. */
     fun reviewFile(path: String, note: String) =
         "Revisa el archivo `$path`$note: busca errores, malas prácticas, problemas de seguridad " +
             "y mejoras. Para cada punto indica la línea aproximada y muestra el código corregido."
 
+    /** Pedido para hacer code review de un Pull Request. */
     fun reviewPullRequest(number: Int, title: String, note: String) =
         "Haz un code review del Pull Request #$number \"$title\"$note. Resume qué cambia, señala " +
             "errores, riesgos y malas prácticas, y termina con un veredicto: aprobar o pedir cambios."
 
+    /** Pedido para explicar un error pegado por el usuario. */
     fun explainError(note: String) =
         "Explícame este error$note: qué significa, la causa más probable en mi proyecto y cómo solucionarlo paso a paso."
 
@@ -98,6 +101,7 @@ internal object AssistantPrompts {
 
     // ── Respuestas sueltas (tareas, coach, informe, aprendizaje) ──
 
+    /** Pide 8–12 tareas en JSON, sin repetir las que ya existen. */
     fun suggestTasks(project: Project): String {
         val existing = project.tasks.joinToString { it.title }.ifBlank { "ninguna" }
         return "Propón entre 8 y 12 tareas concretas y accionables para este proyecto, repartidas en las fases " +
@@ -109,6 +113,7 @@ internal object AssistantPrompts {
     const val COACH_TIP =
         "Dame UN solo consejo práctico para avanzar hoy en este proyecto, en máximo 2 frases y sin títulos ni listas."
 
+    /** Resume los proyectos del cliente y pide un informe sin tecnicismos, listo para enviar. */
     fun clientReport(client: Client, projects: List<Project>): String {
         val summary = projects.joinToString("\n") { p ->
             val done = p.tasks.filter { it.done }.takeLast(5).joinToString { it.title }
@@ -138,12 +143,14 @@ internal object AssistantPrompts {
         }
     }
 
+    /** Pide un reto con las marcas PISTA: y SOLUCIÓN: para poder separarlo después. */
     fun dailyChallenge(context: String) =
         "$context\nPropón UN reto de programación corto (15-30 minutos) adecuado a su nivel y stack. " +
             "Formato exacto: primera línea el título; luego el enunciado con un ejemplo de entrada y salida; " +
             "luego una línea que diga solo ${DailyChallenge.HINT_MARK} seguida de una pista; " +
             "luego una línea que diga solo ${DailyChallenge.SOLUTION_MARK} seguida de la solución con código."
 
+    /** Pide una ruta de aprendizaje de 4 semanas. */
     fun learningPath(context: String) =
         "$context\nArma una ruta de aprendizaje de 4 semanas para mejorar como desarrollador. " +
             "Para cada semana: un objetivo, 3 temas concretos, una práctica aplicable a su proyecto y un recurso " +

@@ -109,6 +109,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     // TUTORIAL: CONECTAR TU IA
     // =====================================================
 
+    /** Reinicia el tutorial "Conecta tu IA" desde el paso 1. */
     fun startSetup() {
         setup = AiSetupState()
     }
@@ -144,10 +145,12 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /** Guarda el modelo elegido en el tutorial (todavía sin confirmar). */
     fun selectModel(id: String) {
         setup = setup.copy(selectedModelId = id)
     }
 
+    /** Termina el tutorial: guarda proveedor y modelo de esta cuenta y deja la IA lista. */
     fun finishSetup() {
         val account = accountKey ?: return
         val tested = setup.testedProvider ?: return
@@ -184,6 +187,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     var modelsError by mutableStateOf<String?>(null)
         private set
 
+    /** Pide la lista de modelos de la IA conectada (diálogo "Cambiar modelo"). */
     fun loadModels() {
         val currentProvider = provider ?: return
         val apiKey = currentApiKey() ?: return
@@ -206,6 +210,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /** Cambia el modelo sin repetir el tutorial. */
     fun changeModel(id: String) {
         val account = accountKey ?: return
         store.putPlain(modelKey(account), id)
@@ -213,6 +218,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         chatError = null
     }
 
+    /** Cambia entre modo Junior y Senior y lo guarda. */
     fun updateMentorMode(mode: MentorMode) {
         mentorMode = mode
         store.putPlain(KEY_MENTOR, mode.name)
@@ -235,11 +241,16 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         loadSnapshot(project?.repoFullName)
     }
 
+    /** Vuelve a leer el repo del proyecto (botón "Actualizar"). */
     fun refreshSnapshot(project: Project?) = loadSnapshot(project?.repoFullName)
 
     /** Repo que se está leyendo o ya se leyó (evita lecturas duplicadas). */
     private var loadedRepoName: String? = null
 
+    /**
+     * Lee el repositorio vinculado (snapshot) para darle contexto a la IA.
+     * Patrón Carga / Éxito / Error: isLoadingRepo, snapshot, repoError.
+     */
     private fun loadSnapshot(fullName: String?) {
         snapshot = null
         repoError = null
@@ -268,6 +279,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /** Lista los repositorios de GitHub del usuario (para vincular uno al proyecto). */
     fun loadRepos() {
         val token = gitHubToken() ?: run {
             reposError = "Primero conecta tus repositorios de GitHub."
@@ -305,6 +317,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     var auditError by mutableStateOf<String?>(null)
         private set
 
+    /** Audita un repo contra las normas DevFlow (no repite si ya está auditado, salvo [force]). */
     fun auditRepo(fullName: String, force: Boolean = false) {
         if (!force && fullName == auditRepoName && (audit != null || isAuditing)) return
         val token = gitHubToken() ?: run {
@@ -406,6 +419,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     val canUseGitHub: Boolean get() = gitHubToken() != null
 
+    /** Token de GitHub de la cuenta activa (null si no conectó sus repos). */
     private fun gitHubToken(): String? = firebaseUid?.let { gitHubTokens.get(it) }
 
     // =====================================================
@@ -526,8 +540,13 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         )
     }
 
+    /** Texto y adjunto que se le van a enviar a la IA. */
     private class ReviewRequest(val text: String, val attachment: String)
 
+    /**
+     * Primero prepara el contenido (p. ej. descarga un archivo de GitHub) y luego lo envía al chat.
+     * isPreparingReview muestra la carga mientras tanto.
+     */
     private fun prepareAndSend(project: Project?, client: Client?, build: suspend () -> ReviewRequest) {
         if (isPreparingReview || isSending) return
         isPreparingReview = true
@@ -574,6 +593,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch { chatHistory.clear(account, firebaseUid, id) }
     }
 
+    /** Limpia el chat en pantalla sin borrar el historial guardado. */
     fun resetChat() = stopAndClearChat()
 
     /** Carga el historial guardado al abrir el asistente (si aún no se cargó). */
@@ -581,6 +601,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         if (!historyLoaded && historyJob?.isActive != true) loadHistory()
     }
 
+    /** Detiene lo que esté en curso y vacía el chat en pantalla. */
     private fun stopAndClearChat() {
         sendJob?.cancel()
         historyJob?.cancel()
@@ -590,6 +611,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         historyLoaded = false
     }
 
+    /**
+     * Carga el historial guardado del proyecto actual.
+     * id == chatId evita mezclar historiales si cambiaste de proyecto mientras cargaba.
+     */
     private fun loadHistory() {
         val account = accountKey ?: return
         val id = chatId
@@ -600,6 +625,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /** Guarda el historial del proyecto actual (sin mensajes vacíos). */
     private fun saveHistory() {
         val account = accountKey ?: return
         val id = chatId
@@ -607,6 +633,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch { chatHistory.save(account, firebaseUid, id, toSave) }
     }
 
+    /** Instrucciones para la IA con el modo, el proyecto y el repo (ver AssistantPrompts.system). */
     private fun buildSystemPrompt(project: Project?, client: Client?): String =
         AssistantPrompts.system(mentorMode, project, client, snapshot)
 
@@ -631,6 +658,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     var taskSuggestionError by mutableStateOf<String?>(null)
         private set
 
+    /** Pide a la IA tareas para el proyecto y las deja en taskSuggestions para que el usuario elija. */
     fun suggestTasks(project: Project, client: Client?) {
         if (isSuggestingTasks) return
         isSuggestingTasks = true
@@ -656,6 +684,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /** Cierra el diálogo de tareas sugeridas. */
     fun clearTaskSuggestions() {
         taskSuggestions = null
         taskSuggestionError = null
@@ -702,6 +731,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     var clientReportError by mutableStateOf<String?>(null)
         private set
 
+    /** Pide a la IA un informe de avance para el cliente (queda en clientReport). */
     fun generateClientReport(client: Client, projects: List<Project>) {
         if (isGeneratingReport) return
         isGeneratingReport = true
@@ -724,6 +754,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /** Cierra el informe. */
     fun clearClientReport() {
         clientReport = null
         clientReportError = null
@@ -805,14 +836,18 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     // CLAVES
     // =====================================================
 
+    /** Clave de la IA de la cuenta activa, descifrada desde SecureStore. */
     private fun currentApiKey(): String? {
         val account = accountKey ?: return null
         val p = provider ?: return null
         return store.getString(apiKeyKey(account, p))
     }
 
+    /** Clave (en SecureStore) del proveedor elegido por cada cuenta. */
     private fun providerKey(account: String) = "ai_provider_$account"
+    /** Clave del modelo elegido por cada cuenta. */
     private fun modelKey(account: String) = "ai_model_$account"
+    /** Clave de la API key de cada proveedor y cuenta (se guarda cifrada). */
     private fun apiKeyKey(account: String, provider: AiProvider) = "ai_key_${provider.name}_$account"
 
     private companion object {

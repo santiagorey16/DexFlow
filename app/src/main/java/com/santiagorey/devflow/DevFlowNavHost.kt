@@ -42,7 +42,15 @@ import com.santiagorey.devflow.screens.StatefulLoginScreen
 import com.santiagorey.devflow.screens.TaskActions
 import com.santiagorey.devflow.screens.launchGoogleSignIn
 
-/** Todas las pantallas de la app y cómo se navega entre ellas. */
+/**
+ * Todas las pantallas de la app y cómo se navega entre ellas.
+ *
+ * Cada `composable(ruta) { ... }` dice qué pantalla se dibuja en esa ruta y le pasa sus datos
+ * (desde los ViewModels) y sus acciones (lambdas como onBackClick). Las pantallas no conocen
+ * al navController: avisan "tocaron atrás" y aquí se decide a dónde ir.
+ *
+ * @param startDestination primera pantalla: "login" sin sesión o "dashboard" con sesión.
+ */
 @Composable
 internal fun DevFlowNavHost(
     navController: NavHostController,
@@ -59,12 +67,15 @@ internal fun DevFlowNavHost(
     openAiSetup: () -> Unit
 ) {
     val context = LocalContext.current
+    // Para lanzar el selector de cuentas de Google al tocar un botón (en Ajustes).
     val coroutineScope = rememberCoroutineScope()
 
     NavHost(
         navController = navController,
         startDestination = startDestination
     ) {
+        // ── Fuera de sesión ──
+        // Login: los datos van al AuthViewModel; si sale bien, MainActivity navega sola al Dashboard.
         composable(Routes.LOGIN) {
             StatefulLoginScreen(
                 isLoading = uiState.isLoading,

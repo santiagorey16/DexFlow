@@ -24,21 +24,40 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+// Identificadores que usa Firebase para cada forma de iniciar sesión.
 const val PROVIDER_GITHUB = "github.com"
+/** Ver PROVIDER_GITHUB. */
 const val PROVIDER_GOOGLE = "google.com"
+/** Ver PROVIDER_GITHUB. */
 const val PROVIDER_PASSWORD = "password"
 
+/**
+ * Todo lo de la cuenta: iniciar sesión (correo, Google, GitHub), registrarse, recuperar
+ * contraseña, vincular o desvincular proveedores, editar el perfil y borrar la cuenta.
+ *
+ * Las pantallas leen [uiState] y llaman a estas funciones; nunca hablan con Firebase directamente.
+ * El trabajo con Firebase lo hace [AuthRepository]; aquí se decide qué mostrar (cargando, errores…).
+ */
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
+    /** Única clase que habla con FirebaseAuth. */
     private val repository = AuthRepository()
 
+    /** Datos pequeños de la cuenta en el teléfono (p. ej. el usuario de GitHub). */
     private val prefs = application.getSharedPreferences("devflow_auth", Context.MODE_PRIVATE)
 
+    /** Token de GitHub de cada cuenta, cifrado en el teléfono. */
     private val gitHubTokens = GitHubTokenStore(application)
 
+    // Patrón "estado privado que se puede cambiar + estado público de solo lectura":
+    // solo este ViewModel cambia _uiState; las pantallas leen uiState con collectAsState().
     private val _uiState = MutableStateFlow(initialState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
+    /**
+     * Firebase llama a este listener cada vez que alguien inicia o cierra sesión.
+     * Actualiza el estado y, gracias a eso, MainActivity navega sola al Dashboard o al Login.
+     */
     private val authStateListener = FirebaseAuth.AuthStateListener { firebaseAuth ->
         val user = firebaseAuth.currentUser
         _uiState.update {
@@ -52,6 +71,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // Se ejecuta una vez, al crear el ViewModel.
     init {
         FirebaseAuth.getInstance().addAuthStateListener(authStateListener)
         // Limpieza de versiones anteriores que tenían una sesión temporal de pruebas.
@@ -64,11 +84,17 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** El ViewModel se destruye: se quita el listener para no dejarlo escuchando (fuga de memoria). */
     override fun onCleared() {
         super.onCleared()
         FirebaseAuth.getInstance().removeAuthStateListener(authStateListener)
     }
 
+    /**
+     * Estado al abrir la app. Firebase recuerda la sesión en el teléfono aunque se cierre la app:
+     * si hay usuario guardado, isAuthenticated = true y MainActivity empieza en el Dashboard;
+     * si no, empieza en el Login.
+     */
     private fun initialState(): AuthUiState {
         val user = repository.currentUser
         return AuthUiState(
@@ -84,6 +110,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     // INICIO DE SESIÓN
     // =====================================================
 
+    /**
+     * Inicia sesión con correo y contraseña.
+     * Muestra la carga (isLoading), y si falla traduce el error de Firebase a un mensaje en español.
+     */
     fun loginWithEmail(email: String, password: String) {
         if (email.isBlank() || password.isBlank()) {
             _uiState.update { it.copy(errorMessage = "Por favor ingrese usuario y contraseña") }
@@ -107,6 +137,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Crea una cuenta con correo. Valida los datos otra vez antes de llamar a Firebase. */
     fun registerWithEmail(name: String, email: String, password: String, confirmPassword: String) {
         if (name.isBlank()) {
             _uiState.update { it.copy(errorMessage = "El nombre es obligatorio.") }
@@ -142,6 +173,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Envía el correo para cambiar la contraseña. */
     fun sendPasswordReset(email: String) {
         if (email.isBlank() || !Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()) {
             _uiState.update { it.copy(errorMessage = "Ingresa un correo electrónico válido.") }
@@ -171,6 +203,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Inicia sesión con el ID token que entregó el selector de cuentas de Google. */
     fun loginWithGoogle(idToken: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -186,6 +219,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Inicia sesión con GitHub (abre el navegador; por eso necesita la Activity). */
     fun loginWithGitHub(activity: Activity) {
         _uiState.update { it.copy(isLoading = true, errorMessage = null) }
         repository.loginWithGitHub(activity) { result ->
@@ -205,6 +239,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     // INTEGRACIONES (vincular / desvincular)
     // =====================================================
 
+    /** Agrega GitHub a la cuenta actual desde Ajustes → Integraciones. */
     fun linkGitHub(activity: Activity) {
         if (!canLink()) return
         _uiState.update { it.copy(linkingProvider = PROVIDER_GITHUB, errorMessage = null) }
@@ -263,6 +298,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Agrega Google a la cuenta actual. */
     fun linkGoogle(idToken: String) {
         if (!canLink()) return
         viewModelScope.launch {
@@ -282,6 +318,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Quita un método de inicio de sesión. No deja quitar el último (quedarías sin forma de entrar).
+     * Si es GitHub, también borra su token guardado.
+     */
     fun unlinkProvider(providerId: String) {
         val state = _uiState.value
         if (state.providerIds.size <= 1) {
@@ -315,6 +355,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     // PERFIL
     // =====================================================
 
+    /** Cambia el nombre visible. Sube profileVersion para que la pantalla se entere del cambio. */
     fun updateDisplayName(name: String) {
         if (name.isBlank()) {
             _uiState.update { it.copy(errorMessage = "El nombre no puede estar vacío.") }
@@ -341,6 +382,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Cambia la contraseña verificando primero la actual. */
     fun changePassword(currentPassword: String, newPassword: String) {
         if (newPassword.length < 8) {
             _uiState.update { it.copy(errorMessage = "La contraseña debe tener mínimo 8 caracteres.") }
@@ -398,15 +440,18 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Cierra sesión. El AuthStateListener actualiza el estado y MainActivity vuelve al Login. */
     fun logout() {
         repository.logout()
         _uiState.update { AuthUiState(isAuthenticated = false, currentUser = null) }
     }
 
+    /** Borra los mensajes ya mostrados (para que no salgan otra vez). */
     fun clearMessages() {
         _uiState.update { it.copy(errorMessage = null, successMessage = null) }
     }
 
+    /** Muestra un error que viene de fuera (p. ej. el selector de Google). */
     fun showError(message: String) {
         _uiState.update { it.copy(errorMessage = message) }
     }
@@ -415,6 +460,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     // HELPERS
     // =====================================================
 
+    /**
+     * Común a todos los logins que salieron bien: guarda el usuario de GitHub (si aplica)
+     * y su token cifrado, y actualiza el estado.
+     */
     private fun onSignedIn(result: AuthResult) {
         rememberGithubUsername(result)
         val user = result.user
@@ -431,6 +480,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Vuelve a leer los proveedores vinculados y si hay acceso a los repos. */
     private fun refreshUser(user: FirebaseUser?) {
         val current = user ?: repository.currentUser
         _uiState.update {
@@ -443,6 +493,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Solo se pueden conectar integraciones con una sesión iniciada; si no hay, muestra un error y devuelve false. */
     private fun canLink(): Boolean {
         if (repository.currentUser == null) {
             _uiState.update {
@@ -453,9 +504,11 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         return true
     }
 
+    /** true si hay un token de GitHub guardado para este usuario (el asistente puede leer repos). */
     private fun hasRepoAccess(user: FirebaseUser?): Boolean =
         user != null && gitHubTokens.get(user.uid) != null
 
+    /** Guarda el usuario de GitHub (para mostrarlo en Ajustes) y su token cifrado. */
     private fun rememberGithubUsername(result: AuthResult) {
         // Token para leer repositorios (solo viene al iniciar sesión / vincular con GitHub).
         val token = result.gitHubAccessToken()
@@ -469,10 +522,13 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit { putString(githubKey(uid), username) }
     }
 
+    /** Usuario de GitHub guardado de esta cuenta. */
     private fun storedGithubUsername(uid: String): String? = prefs.getString(githubKey(uid), null)
 
+    /** Clave en SharedPreferences del usuario de GitHub de cada cuenta. */
     private fun githubKey(uid: String) = "github_username_$uid"
 
+    /** Traduce los errores de Google o GitHub al iniciar sesión (cuenta ya existe, cancelado…). */
     private fun friendlyProviderError(e: Throwable, provider: String): String =
         when {
             e is FirebaseAuthUserCollisionException ->
@@ -484,6 +540,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             else -> "No se pudo iniciar sesión con $provider: ${errorDetail(e)}"
         }
 
+    /** Traduce los errores al vincular (esa cuenta ya está en otro usuario, cancelado…). */
     private fun friendlyLinkError(e: Throwable, provider: String): String =
         when {
             e is FirebaseAuthUserCollisionException ->

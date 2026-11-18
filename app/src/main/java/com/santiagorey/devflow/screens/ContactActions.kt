@@ -13,11 +13,13 @@ import android.widget.Toast
  */
 object ContactActions {
 
+    /** Abre el marcador del teléfono con el número escrito (no llama solo: el usuario confirma). */
     fun call(context: Context, phone: String) {
         if (phone.isBlank()) return noPhone(context)
         launch(context, Intent(Intent.ACTION_DIAL, Uri.parse("tel:${Uri.encode(phone.trim())}")), "No hay app de teléfono disponible.")
     }
 
+    /** Abre la app de mensajes (SMS) con el número. */
     fun sms(context: Context, phone: String) {
         if (phone.isBlank()) return noPhone(context)
         launch(context, Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:${Uri.encode(phone.trim())}")), "No hay app de mensajes disponible.")
@@ -30,6 +32,7 @@ object ContactActions {
         launch(context, Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$digits")), "No se pudo abrir WhatsApp.")
     }
 
+    /** Abre la app de correo con la dirección del cliente. */
     fun email(context: Context, email: String) {
         if (email.isBlank()) return
         launch(context, Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:${email.trim()}")), "No hay app de correo disponible.")
@@ -62,6 +65,7 @@ object ContactActions {
         launch(context, Intent.createChooser(intent, "Compartir informe"), "No hay apps para compartir.")
     }
 
+    /** Lanza el Intent; si no hay ninguna app que lo abra, muestra [errorMessage] en vez de cerrarse. */
     private fun launch(context: Context, intent: Intent, errorMessage: String) {
         try {
             context.startActivity(intent)
@@ -70,6 +74,7 @@ object ContactActions {
         }
     }
 
+    /** Aviso cuando el cliente no tiene teléfono guardado. */
     private fun noPhone(context: Context) {
         Toast.makeText(context, "Este cliente no tiene número registrado.", Toast.LENGTH_SHORT).show()
     }

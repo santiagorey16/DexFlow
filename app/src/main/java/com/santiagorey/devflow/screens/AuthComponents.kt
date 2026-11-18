@@ -52,6 +52,7 @@ import com.santiagorey.devflow.R
 
 // Piezas comunes de Login, Registro y Recuperar contraseña (mismo estilo oscuro).
 
+/** Colores de las pantallas de login, registro y recuperar contraseña. */
 internal object AuthColors {
     val Background = Color(0xFF0B0E14)
     val Card = Color(0xFF111622)
@@ -80,6 +81,7 @@ internal fun AuthScaffold(modifier: Modifier = Modifier, content: @Composable Co
     }
 }
 
+/** Título grande centrado ("Bienvenido a DevFlow", "Crear cuenta"…). */
 @Composable
 internal fun AuthTitle(text: String, fontSize: TextUnit) {
     Text(
@@ -89,6 +91,7 @@ internal fun AuthTitle(text: String, fontSize: TextUnit) {
     )
 }
 
+/** Texto gris centrado debajo del título. */
 @Composable
 internal fun AuthSubtitle(text: String, lineHeight: TextUnit = 18.sp) {
     Text(
@@ -126,6 +129,7 @@ internal fun AuthLabel(text: String) {
     )
 }
 
+/** Colores del campo de texto: fondo oscuro, borde morado al enfocar y rojo si hay error. */
 @Composable
 internal fun authTextFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedContainerColor = AuthColors.Field,

@@ -166,6 +166,7 @@ fun RepoAuditCard(
     }
 }
 
+/** Color del puntaje: verde si es alto, amarillo si es medio, rojo si es bajo. */
 private fun scoreColor(value: Int?): Color = when {
     value == null -> DevFlowColors.TextSecondary
     value >= 80 -> DevFlowColors.Green
@@ -173,6 +174,7 @@ private fun scoreColor(value: Int?): Color = when {
     else -> DevFlowColors.Red
 }
 
+/** Círculo con el puntaje de 0 a 100 (o una rueda mientras se audita). */
 @Composable
 private fun ScoreCircle(score: Int?, loading: Boolean) {
     Box(
@@ -191,6 +193,7 @@ private fun ScoreCircle(score: Int?, loading: Boolean) {
     }
 }
 
+/** Métrica pequeña de la auditoría (tests, commits, seguridad). */
 @Composable
 private fun AuditMetric(modifier: Modifier, label: String, value: String?, percent: Int?) {
     Column(
@@ -205,6 +208,7 @@ private fun AuditMetric(modifier: Modifier, label: String, value: String?, perce
     }
 }
 
+/** Lista de puntos revisados con ✓ o ✗ y su detalle. */
 @Composable
 private fun AuditChecklist(audit: RepoAudit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -233,6 +237,7 @@ private fun AuditChecklist(audit: RepoAudit) {
     }
 }
 
+/** Botón principal de la tarjeta de auditoría. */
 @Composable
 private fun PrimaryActionButton(text: String, enabled: Boolean, onClick: () -> Unit) {
     Button(

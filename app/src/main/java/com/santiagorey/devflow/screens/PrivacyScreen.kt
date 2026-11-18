@@ -35,6 +35,7 @@ internal val privacySections = listOf(
         "Si tienes dudas sobre tus datos, escríbenos desde la ficha de DevFlow en Google Play."
 )
 
+/** Política de privacidad dentro de la app: qué datos se guardan, dónde y cómo borrarlos. */
 @Composable
 fun PrivacyScreen(onBackClick: () -> Unit) {
     Scaffold(

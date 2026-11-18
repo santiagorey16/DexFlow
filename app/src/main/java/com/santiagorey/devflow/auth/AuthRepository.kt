@@ -13,16 +13,28 @@ import com.google.firebase.auth.userProfileChangeRequest
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 
+/**
+ * Única clase que habla con Firebase Authentication.
+ *
+ * No hace falta inicializar Firebase a mano: al abrir la app, la librería de Firebase se
+ * inicia sola con los datos de google-services.json. Por eso basta con FirebaseAuth.getInstance().
+ *
+ * Las tareas de Firebase (Task) se convierten en funciones suspend con `.await()`, así el
+ * código queda en orden, sin callbacks anidados.
+ */
 class AuthRepository(
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
 ) {
+    /** Usuario con sesión iniciada (Firebase lo recuerda aunque se cierre la app), o null. */
     val currentUser: FirebaseUser?
         get() = auth.currentUser
 
+    /** Inicia sesión con correo y contraseña. .await() espera la respuesta sin bloquear la app. */
     suspend fun loginWithEmail(email: String, password: String): AuthResult {
         return auth.signInWithEmailAndPassword(email.trim(), password).await()
     }
 
+    /** Crea la cuenta y le pone el nombre visible. */
     suspend fun registerWithEmail(name: String, email: String, password: String): AuthResult {
         val result = auth.createUserWithEmailAndPassword(email.trim(), password).await()
         result.user?.let { user ->
@@ -34,15 +46,21 @@ class AuthRepository(
         return result
     }
 
+    /** Firebase envía el correo para restablecer la contraseña. */
     suspend fun sendPasswordReset(email: String) {
         auth.sendPasswordResetEmail(email.trim()).await()
     }
 
+    /** Convierte el ID token de Google en una credencial de Firebase e inicia sesión. */
     suspend fun loginWithGoogle(idToken: String): AuthResult {
         val credential = GoogleAuthProvider.getCredential(idToken, null)
         return auth.signInWithCredential(credential).await()
     }
 
+    /**
+     * Inicia sesión con GitHub abriendo el navegador.
+     * pendingAuthResult: si Android cerró la app mientras estabas en el navegador, se retoma ese login.
+     */
     fun loginWithGitHub(activity: Activity, onResult: (Result<AuthResult>) -> Unit) {
         // Si el flujo web quedó pendiente (la actividad se recreó), se retoma.
         val pendingResultTask = auth.pendingAuthResult
@@ -55,6 +73,7 @@ class AuthRepository(
     // VINCULAR CUENTAS (Ajustes → Integraciones)
     // =====================================================
 
+    /** Vincula GitHub a la cuenta que ya tiene sesión. */
     fun linkGitHub(activity: Activity, onResult: (Result<AuthResult>) -> Unit) {
         val user = auth.currentUser
             ?: return onResult(Result.failure(IllegalStateException("No hay sesión activa")))
@@ -75,12 +94,14 @@ class AuthRepository(
         task.deliverTo(onResult)
     }
 
+    /** Vincula Google a la cuenta que ya tiene sesión. */
     suspend fun linkGoogle(idToken: String): AuthResult {
         val user = auth.currentUser ?: throw IllegalStateException("No hay sesión activa")
         val credential = GoogleAuthProvider.getCredential(idToken, null)
         return user.linkWithCredential(credential).await()
     }
 
+    /** Quita un método de inicio de sesión (p. ej. "github.com"). */
     suspend fun unlink(providerId: String): FirebaseUser? {
         val user = auth.currentUser ?: return null
         return user.unlink(providerId).await().user
@@ -90,6 +111,7 @@ class AuthRepository(
     // PERFIL (Ajustes → Cuenta)
     // =====================================================
 
+    /** Cambia el nombre visible del usuario. */
     suspend fun updateDisplayName(name: String): FirebaseUser {
         val user = auth.currentUser ?: throw IllegalStateException("No hay sesión activa")
         user.updateProfile(userProfileChangeRequest { displayName = name.trim() }).await()
@@ -130,21 +152,25 @@ class AuthRepository(
         user.delete().await()
     }
 
+    /** Vuelve a pedir los datos del usuario a Firebase (por si cambiaron en otro teléfono). */
     suspend fun reloadUser(): FirebaseUser? {
         auth.currentUser?.reload()?.await()
         return auth.currentUser
     }
 
+    /** Cierra la sesión en este teléfono. */
     fun logout() {
         auth.signOut()
     }
 
+    /** Proveedor de GitHub con los permisos que se piden al usuario. */
     private fun gitHubProvider() =
         OAuthProvider.newBuilder("github.com").apply {
             // "repo" permite que el asistente lea tus repositorios (también los privados).
             scopes = listOf("user:email", "read:user", "repo")
         }.build()
 
+    /** Pasa el resultado (éxito o error) del Task de Firebase a un callback con Result. */
     private fun Task<AuthResult>.deliverTo(onResult: (Result<AuthResult>) -> Unit) {
         addOnSuccessListener { result -> onResult(Result.success(result)) }
         addOnFailureListener { exception -> onResult(Result.failure(exception)) }
@@ -165,6 +191,7 @@ fun FirebaseUser?.linkedProviderIds(): Set<String> =
         ?.toSet()
         ?: emptySet()
 
+/** "Inicio de sesión reciente" = hace menos de 5 minutos. */
 private const val RECENT_LOGIN_MS = 5 * 60 * 1000L
 
 /** Colecciones de cada usuario en Firestore (users/{uid}/...). */

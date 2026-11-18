@@ -22,6 +22,7 @@ import com.santiagorey.devflow.projects.Client
 import com.santiagorey.devflow.projects.Project
 import com.santiagorey.devflow.ui.theme.DevFlowTheme
 
+/** Pestaña Clientes: buscador y lista (LazyColumn con key = id) con acciones de llamar y escribir. */
 @Composable
 fun CustomersScreen(
     currentUser: FirebaseUser? = null,

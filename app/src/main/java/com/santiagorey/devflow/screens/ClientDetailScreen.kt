@@ -130,6 +130,7 @@ fun ClientDetailScreen(
 // FORMULARIO
 // =====================================================
 
+/** Formulario de cliente (nombre, teléfono, correo, empresa y notas) para crear o editar. */
 @Composable
 private fun ClientForm(
     initial: Client?,
@@ -225,6 +226,7 @@ private fun ClientForm(
 // FICHA
 // =====================================================
 
+/** Ficha del cliente: datos, botones de contacto, sus proyectos, informe con IA y eliminar. */
 @Composable
 private fun ClientProfile(
     client: Client,
@@ -379,6 +381,7 @@ private fun ClientProfile(
     }
 }
 
+/** Fila con icono y un dato del cliente (teléfono, correo…). */
 @Composable
 private fun InfoRow(iconRes: Int, text: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -388,6 +391,7 @@ private fun InfoRow(iconRes: Int, text: String) {
     }
 }
 
+/** Botón de contacto (Llamar, WhatsApp, Correo) con icono y texto. */
 @Composable
 private fun ContactActionButton(
     modifier: Modifier,
@@ -410,6 +414,7 @@ private fun ContactActionButton(
     }
 }
 
+/** Proyecto asignado al cliente, con opción de quitarlo. */
 @Composable
 private fun ClientProjectRow(project: Project, onRemove: () -> Unit) {
     val color = phaseColor(project.progress)
@@ -452,6 +457,7 @@ private fun ClientProjectRow(project: Project, onRemove: () -> Unit) {
     }
 }
 
+/** Diálogo para asignar al cliente uno de los proyectos existentes. */
 @Composable
 private fun AssignProjectDialog(
     projects: List<Project>,

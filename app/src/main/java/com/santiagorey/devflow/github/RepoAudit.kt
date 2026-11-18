@@ -11,6 +11,7 @@ data class AuditCheck(
     val fulfillment: Double = if (passed) 1.0 else 0.0
 )
 
+/** Resultado de auditar un repo: los puntos revisados y métricas extra. */
 data class RepoAudit(
     val repoFullName: String,
     val checks: List<AuditCheck>,
@@ -54,6 +55,7 @@ object RepoAuditor {
         "kt", "java", "js", "jsx", "ts", "tsx", "py", "go", "rb", "php", "cs", "swift", "dart", "rs", "c", "cpp", "vue"
     )
 
+    /** Revisa secretos, .gitignore, tests, CI, Conventional Commits y README del repo. */
     fun audit(snapshot: RepoSnapshot): RepoAudit {
         val paths = snapshot.allPaths
         val names = paths.map { it.substringAfterLast('/') }

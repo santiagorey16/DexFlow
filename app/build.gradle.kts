@@ -2,7 +2,9 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 
-    // Firebase / Google Services
+    // Firebase / Google Services: al compilar lee app/google-services.json (id del proyecto,
+    // clave de la API de Firebase, client id de Google) y lo convierte en recursos de la app.
+    // Por eso no hay que escribir ninguna clave de Firebase en el código.
     alias(libs.plugins.google.services)
 }
 
@@ -111,14 +113,18 @@ dependencies {
     // FIREBASE
     // =====================================================
 
+    // BoM ("lista de materiales"): fija versiones de Firebase que funcionan bien juntas,
+    // por eso firebase-auth y firebase-firestore no llevan versión propia.
     implementation(
         platform(libs.firebase.bom)
     )
 
+    // Inicio de sesión (correo, Google, GitHub): FirebaseAuth.
     implementation(
         libs.firebase.auth
     )
 
+    // Base de datos en la nube con copia offline: proyectos, clientes, actividad y chats.
     implementation(
         libs.firebase.firestore
     )

@@ -62,6 +62,7 @@ enum class AiProvider(
     fun looksLikeValidKey(key: String): Boolean = key.trim().startsWith(keyPrefix)
 
     companion object {
+        /** Busca un proveedor por su nombre guardado (null si no hay ninguno). */
         fun fromName(name: String?): AiProvider? = entries.firstOrNull { it.name == name }
     }
 }
@@ -77,6 +78,7 @@ data class ChatMessage(
     /** Contenido extra para la IA (archivo, diff, error largo) que no se muestra completo en el chat. */
     val attachment: String? = null
 ) {
+    /** Quién escribió el mensaje. */
     enum class Role { USER, ASSISTANT }
 
     /** Texto que recibe la IA: la pregunta más el adjunto, si hay. */

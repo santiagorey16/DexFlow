@@ -9,6 +9,7 @@ internal data class GuideTemplate(
     val content: String
 )
 
+/** Plantillas listas para copiar en un repositorio (se muestran en Guías). */
 internal val guideTemplates = listOf(
     GuideTemplate(
         title = "README del proyecto",

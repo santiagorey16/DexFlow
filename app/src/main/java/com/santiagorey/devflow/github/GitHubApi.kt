@@ -11,6 +11,7 @@ import org.json.JSONObject
 import java.io.IOException
 import java.net.URLEncoder
 
+/** Repositorio de GitHub (lo justo para listarlo y vincularlo). */
 data class GitHubRepo(
     val fullName: String,
     val name: String,
@@ -33,8 +34,10 @@ data class CiRun(
     val failed: Boolean get() = conclusion in setOf("failure", "timed_out", "startup_failure")
 }
 
+/** Un commit: primera línea del mensaje, autor y fecha. */
 data class GitHubCommit(val message: String, val author: String, val date: String)
 
+/** Issue o Pull Request abierto (GitHub los devuelve juntos). */
 data class GitHubIssue(val number: Int, val title: String, val isPullRequest: Boolean, val labels: List<String>)
 
 /** Foto del estado de un repositorio, lista para mostrarla o pasársela a la IA. */
@@ -90,6 +93,7 @@ data class RepoSnapshot(
 /** Cliente mínimo de la API REST de GitHub usando el token del usuario. */
 class GitHubApi(private val token: String) {
 
+    /** Repos del usuario (propios, de colaborador y de organizaciones), los más recientes primero. */
     suspend fun listRepos(): List<GitHubRepo> = withContext(Dispatchers.IO) {
         val array = call {
             HttpJson.requestArray(
@@ -100,6 +104,10 @@ class GitHubApi(private val token: String) {
         (0 until array.length()).mapNotNull { array.optJSONObject(it)?.toRepo() }
     }
 
+    /**
+     * Lee el repo completo en paralelo (async): lenguajes, commits, issues, archivos y README.
+     * Si una parte falla (p. ej. un repo sin README), las demás siguen.
+     */
     suspend fun snapshot(fullName: String): RepoSnapshot = withContext(Dispatchers.IO) {
         val repoJson = call { HttpJson.request("$BASE/repos/$fullName", headers = headers()) }
         val repo = repoJson.toRepo()
@@ -188,12 +196,14 @@ class GitHubApi(private val token: String) {
         )
     }
 
+    /** Lenguajes del repo y cuántos bytes tiene cada uno. */
     private fun languages(fullName: String): Map<String, Long> {
         val json = HttpJson.request("$BASE/repos/$fullName/languages", headers = headers())
         return json.keys().asSequence().associateWith { json.optLong(it) }
             .entries.sortedByDescending { it.value }.associate { it.key to it.value }
     }
 
+    /** Últimos commits. */
     private fun commits(fullName: String): List<GitHubCommit> {
         val array = HttpJson.requestArray("$BASE/repos/$fullName/commits?per_page=$MAX_COMMITS", headers())
         return (0 until array.length()).mapNotNull { i ->
@@ -207,6 +217,7 @@ class GitHubApi(private val token: String) {
         }
     }
 
+    /** Issues y PRs abiertos. */
     private fun openIssues(fullName: String): List<GitHubIssue> {
         val array = HttpJson.requestArray("$BASE/repos/$fullName/issues?state=open&per_page=$MAX_ISSUES", headers())
         return (0 until array.length()).mapNotNull { i ->
@@ -221,6 +232,7 @@ class GitHubApi(private val token: String) {
         }
     }
 
+    /** Todas las rutas de archivos del repo, sin carpetas como node_modules/ o build/. */
     private fun tree(fullName: String, branch: String): List<String> {
         val ref = URLEncoder.encode(branch, "UTF-8")
         val json = HttpJson.request("$BASE/repos/$fullName/git/trees/$ref?recursive=1", headers = headers())
@@ -233,12 +245,14 @@ class GitHubApi(private val token: String) {
         return paths
     }
 
+    /** Inicio del README. */
     private fun readme(fullName: String): String? {
         val headers = headers() + ("Accept" to "application/vnd.github.raw+json")
         val text = HttpJson.requestText("$BASE/repos/$fullName/readme", "GET", headers, null)
         return text.take(MAX_README_CHARS).takeIf { it.isNotBlank() }
     }
 
+    /** Headers que pide GitHub: token, formato, versión de la API y User-Agent. */
     private fun headers() = mapOf(
         "Authorization" to "Bearer $token",
         "Accept" to "application/vnd.github+json",
@@ -246,6 +260,7 @@ class GitHubApi(private val token: String) {
         "User-Agent" to "DevFlow-Android"
     )
 
+    /** JSON de GitHub → GitHubRepo. */
     private fun JSONObject.toRepo() = GitHubRepo(
         fullName = optString("full_name"),
         name = optString("name"),
@@ -256,6 +271,7 @@ class GitHubApi(private val token: String) {
         htmlUrl = optString("html_url")
     )
 
+    /** Traduce los errores HTTP de GitHub a mensajes en español (401 acceso expirado, 403 límite…). */
     private inline fun <T> call(block: () -> T): T =
         try {
             block()

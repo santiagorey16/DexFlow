@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.sp
 
 // Diálogos de Ajustes: cambiar nombre, contraseña y eliminar la cuenta.
 
+/** Diálogo para cambiar el nombre visible de la cuenta. */
 @Composable
 internal fun EditNameDialog(
     initialName: String,
@@ -62,6 +63,7 @@ internal fun EditNameDialog(
     )
 }
 
+/** Diálogo para cambiar la contraseña: pide la actual (Firebase exige verificar) y la nueva dos veces. */
 @Composable
 internal fun ChangePasswordDialog(
     onDismiss: () -> Unit,
@@ -106,6 +108,7 @@ internal fun ChangePasswordDialog(
     )
 }
 
+/** Campo de contraseña con los puntos ocultos. */
 @Composable
 private fun PasswordField(value: String, onValueChange: (String) -> Unit, label: String) {
     OutlinedTextField(

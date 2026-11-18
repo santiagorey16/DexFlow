@@ -205,6 +205,7 @@ internal fun TasksCard(project: Project, client: Client?, assistant: AssistantVi
     }
 }
 
+/** Texto que funciona como botón pequeño; muestra una rueda mientras [loading]. */
 @Composable
 private fun SmallAction(label: String, color: Color, loading: Boolean, onClick: () -> Unit) {
     Row(
@@ -219,6 +220,7 @@ private fun SmallAction(label: String, color: Color, loading: Boolean, onClick: 
     }
 }
 
+/** Una tarea: casilla de hecha, título, tiempo, cronómetro y menú (mover, crear issue, borrar). */
 @Composable
 private fun TaskRow(task: ProjectTask, now: Long, canCreateIssue: Boolean, actions: TaskActions, onCreateIssue: () -> Unit) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -253,6 +255,7 @@ private fun TaskRow(task: ProjectTask, now: Long, canCreateIssue: Boolean, actio
     }
 }
 
+/** Datos debajo de la tarea: tiempo registrado e issue de GitHub vinculado. */
 @Composable
 private fun TaskMeta(task: ProjectTask, now: Long) {
     val parts = listOfNotNull(
@@ -265,6 +268,7 @@ private fun TaskMeta(task: ProjectTask, now: Long) {
     }
 }
 
+/** Botón ▶/■ para iniciar o detener el cronómetro de la tarea. */
 @Composable
 private fun TimerButton(task: ProjectTask, actions: TaskActions) {
     if (task.done) return
@@ -280,6 +284,7 @@ private fun TimerButton(task: ProjectTask, actions: TaskActions) {
     }
 }
 
+/** Vista Kanban: tres columnas (Por hacer, En curso, Hecho) con scroll horizontal. */
 @Composable
 private fun KanbanBoard(tasks: List<ProjectTask>, now: Long, actions: TaskActions) {
     Row(
@@ -330,6 +335,7 @@ private fun KanbanBoard(tasks: List<ProjectTask>, now: Long, actions: TaskAction
     }
 }
 
+/** Diálogo con las tareas que sugirió la IA: todas vienen marcadas y el usuario elige cuáles agregar. */
 @Composable
 private fun TaskSuggestionsDialog(
     suggestions: List<ProjectTask>,

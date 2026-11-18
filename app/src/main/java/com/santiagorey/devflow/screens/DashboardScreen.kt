@@ -38,6 +38,11 @@ import com.santiagorey.devflow.ui.theme.DevFlowTheme
 
 
 
+/**
+ * Pestaña Inicio: resumen del día.
+ * Calcula al vuelo proyectos activos, vencidos, entregas de esta semana y el proyecto destacado,
+ * y muestra coach/consejo, métricas, avance por fase, proyectos y actividad reciente en una LazyColumn.
+ */
 @Composable
 fun DashboardScreen(
     currentUser: FirebaseUser? = null,
@@ -285,6 +290,7 @@ fun DashboardScreen(
 }
 
 
+/** Tarjeta "Empieza aquí" para crear el primer proyecto o cliente. */
 @Composable
 private fun WelcomeCard(
     hasProjects: Boolean,
@@ -330,6 +336,7 @@ private fun WelcomeCard(
     }
 }
 
+/** Tarjeta "Continúa trabajando" con el proyecto destacado (entrega más próxima). */
 @Composable
 private fun ContinueWorkingCard(
     project: Project,
@@ -389,6 +396,7 @@ private fun ContinueWorkingCard(
     }
 }
 
+/** Barra de avance general y cuántos proyectos hay en cada fase. */
 @Composable
 private fun OverallProgressCard(projects: List<Project>) {
     val average = projects.map { it.progress }.average().toInt()
@@ -418,6 +426,7 @@ private fun OverallProgressCard(projects: List<Project>) {
     }
 }
 
+/** Una fila del avance por fase: nombre, barra proporcional y cantidad. */
 @Composable
 private fun PhaseCountRow(label: String, count: Int, total: Int) {
     Column(modifier = Modifier.padding(vertical = 3.dp)) {
@@ -435,6 +444,7 @@ private fun PhaseCountRow(label: String, count: Int, total: Int) {
     }
 }
 
+/** Tarjeta de métrica del Dashboard con icono y una insignia o punto opcional. */
 @Composable
 private fun DashboardMetricCard(
     iconRes: Int,
@@ -487,6 +497,7 @@ private fun DashboardMetricCard(
     }
 }
 
+/** Proyecto en la lista del Dashboard: nombre, cliente, fase y barra de avance (se puede tocar). */
 @Composable
 private fun DashboardProjectItem(
     project: Project,
@@ -548,6 +559,7 @@ private val dailyTips = listOf(
     "Revisa tu propio código como si fuera de otra persona antes de hacer el merge."
 )
 
+/** Franja roja que avisa cuántos proyectos tienen la entrega vencida. */
 @Composable
 private fun OverdueBanner(count: Int, firstName: String, onClick: () -> Unit) {
     Row(
@@ -577,6 +589,10 @@ private fun OverdueBanner(count: Int, firstName: String, onClick: () -> Unit) {
     }
 }
 
+/**
+ * Consejo del coach de IA (si está activo y conectado) o un consejo fijo que cambia cada día.
+ * Se puede ocultar por hoy: el día se guarda con rememberStringPreference.
+ */
 @Composable
 private fun CoachOrTipCard(coachEnabled: Boolean, coachTip: String?, coachLoading: Boolean, projectName: String?) {
     val today = java.time.LocalDate.now()
@@ -625,6 +641,7 @@ private fun CoachOrTipCard(coachEnabled: Boolean, coachTip: String?, coachLoadin
     }
 }
 
+/** Tarjeta para abrir el asistente de IA (dice qué IA está conectada). */
 @Composable
 private fun AssistantEntryCard(connectedLabel: String?, projectName: String?, onClick: () -> Unit) {
     DevFlowCard(modifier = Modifier.clickable { onClick() }) {
@@ -660,6 +677,7 @@ private fun AssistantEntryCard(connectedLabel: String?, projectName: String?, on
     }
 }
 
+/** Una fila de la actividad reciente: icono, texto y hace cuánto pasó. */
 @Composable
 private fun ActivityRow(iconRes: Int, title: String, time: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {

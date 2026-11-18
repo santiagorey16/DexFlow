@@ -123,6 +123,7 @@ fun LearningCard(
     }
 }
 
+/** Rueda de carga con un texto. */
 @Composable
 private fun Loading(text: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -132,11 +133,13 @@ private fun Loading(text: String) {
     }
 }
 
+/** Texto que se puede tocar, como un enlace. */
 @Composable
 private fun LinkText(text: String, color: Color = DevFlowColors.Cyan, onClick: () -> Unit) {
     Text(text, color = color, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onClick() }.padding(vertical = 4.dp))
 }
 
+/** Bloque de texto con fondo (en monoespaciado para el código de la solución). */
 @Composable
 private fun Block(text: String, monospace: Boolean = false) {
     SelectionContainer {

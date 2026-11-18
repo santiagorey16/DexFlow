@@ -2,6 +2,10 @@ package com.santiagorey.devflow.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
+/**
+ * Colores de la plantilla de Android Studio para el tema de Material.
+ * Las pantallas de DevFlow usan sus propios colores (DevFlowColors, en SharedComponents.kt).
+ */
 val Purple80 = Color(0xFFD0BCFF)
 val PurpleGrey80 = Color(0xFFCCC2DC)
 val Pink80 = Color(0xFFEFB8C8)

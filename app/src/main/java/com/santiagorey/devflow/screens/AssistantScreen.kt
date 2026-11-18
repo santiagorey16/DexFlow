@@ -285,6 +285,7 @@ fun AssistantScreen(
     }
 }
 
+/** Barra superior del asistente: volver, IA y modelo en uso (al tocarlo se cambia), menú. */
 @Composable
 private fun AssistantTopBar(
     subtitle: String,
@@ -326,6 +327,7 @@ private fun AssistantTopBar(
     }
 }
 
+/** Tarjeta de contexto: de qué proyecto se habla y el estado de su repositorio de GitHub. */
 @Composable
 private fun ContextCard(
     projects: List<Project>,
@@ -423,6 +425,7 @@ private fun ContextCard(
     }
 }
 
+/** Resumen del repo leído: lenguajes, commits, issues y PRs abiertos. */
 @Composable
 private fun RepoSummary(snapshot: RepoSnapshot, onChange: () -> Unit, onRefresh: () -> Unit) {
     Column(
@@ -455,6 +458,7 @@ private fun RepoSummary(snapshot: RepoSnapshot, onChange: () -> Unit, onRefresh:
     }
 }
 
+/** Fila con un texto y un enlace de acción a la derecha. */
 @Composable
 private fun ActionRow(text: String, action: String, enabled: Boolean = true, onClick: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -472,11 +476,13 @@ private fun ActionRow(text: String, action: String, enabled: Boolean = true, onC
     }
 }
 
+/** Texto pequeño gris de ayuda. */
 @Composable
 private fun SmallCaption(text: String) {
     Text(text, style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = DevFlowColors.TextSecondary, fontWeight = FontWeight.Bold))
 }
 
+/** Atajos de preguntas frecuentes (QuickAction). Los que necesitan repo se desactivan si no hay. */
 @Composable
 private fun QuickActions(hasRepo: Boolean, enabled: Boolean, onAction: (QuickAction) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -501,6 +507,10 @@ private fun QuickActions(hasRepo: Boolean, enabled: Boolean, onAction: (QuickAct
     }
 }
 
+/**
+ * Burbuja de un mensaje del chat: los tuyos a la derecha y los de la IA a la izquierda
+ * con Markdown simple y botón "Explícamelo más simple".
+ */
 @Composable
 private fun MessageBubble(message: ChatMessage, showActions: Boolean, onExplainSimpler: () -> Unit) {
     val isUser = message.role == ChatMessage.Role.USER
@@ -549,6 +559,7 @@ private fun MessageBubble(message: ChatMessage, showActions: Boolean, onExplainS
     }
 }
 
+/** Burbuja "La IA está pensando…" mientras llega la respuesta. */
 @Composable
 private fun ThinkingBubble(name: String) {
     Row(
@@ -567,6 +578,7 @@ private fun ThinkingBubble(name: String) {
 /** Herramientas del asistente que necesitan un dato extra (archivo, PR o texto del error). */
 internal enum class AssistantTool { REVIEW_FILE, REVIEW_PR, EXPLAIN_ERROR }
 
+/** Herramientas del chat: revisar un archivo, revisar un PR o explicar un error. */
 @Composable
 private fun ToolsRow(hasRepo: Boolean, hasPullRequests: Boolean, enabled: Boolean, preparing: Boolean, onTool: (AssistantTool) -> Unit) {
     Row(
@@ -588,6 +600,7 @@ private fun ToolsRow(hasRepo: Boolean, hasPullRequests: Boolean, enabled: Boolea
     }
 }
 
+/** Chip de una herramienta. */
 @Composable
 private fun ToolChip(label: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
@@ -602,6 +615,7 @@ private fun ToolChip(label: String, enabled: Boolean, onClick: () -> Unit) {
     }
 }
 
+/** Caja para escribir: botón Enviar, o Detener mientras la IA responde. */
 @Composable
 private fun ChatInput(value: String, onValueChange: (String) -> Unit, sending: Boolean, onSend: () -> Unit, onStop: () -> Unit) {
     androidx.compose.material3.Surface(

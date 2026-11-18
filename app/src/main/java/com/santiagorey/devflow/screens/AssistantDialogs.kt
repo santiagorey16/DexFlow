@@ -45,6 +45,7 @@ import com.santiagorey.devflow.github.RepoSnapshot
 
 // Diálogos del asistente (modelo, herramientas, repositorio) y utilidades de texto.
 
+/** Diálogo para cambiar el modelo de la IA sin repetir el tutorial (lista en LazyColumn). */
 @Composable
 internal fun ModelPickerDialog(
     assistant: AssistantViewModel,
@@ -93,6 +94,7 @@ internal fun ModelPickerDialog(
     )
 }
 
+/** Diálogo de cada herramienta: elegir un archivo del repo, un PR, o pegar un error. */
 @Composable
 internal fun ToolDialog(
     tool: AssistantTool,
@@ -177,6 +179,7 @@ internal fun ToolDialog(
     )
 }
 
+/** Diálogo para vincular un repositorio de GitHub al proyecto, con buscador. */
 @Composable
 internal fun RepoPickerDialog(
     assistant: AssistantViewModel,
@@ -271,6 +274,7 @@ internal fun renderSimpleMarkdown(text: String): AnnotatedString = buildAnnotate
     }
 }
 
+/** Aplica **negrita** y `código` dentro de una línea. */
 private fun AnnotatedString.Builder.appendInline(line: String) {
     var i = 0
     while (i < line.length) {

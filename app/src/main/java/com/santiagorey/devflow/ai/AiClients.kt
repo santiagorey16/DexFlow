@@ -24,6 +24,7 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 
+/** Etiqueta para filtrar los mensajes de la IA en Logcat. */
 private const val LOG_TAG = "DevFlowAI"
 
 /** Máximo tiempo sin recibir datos en una respuesta con streaming. */
@@ -34,8 +35,13 @@ private const val STREAM_TIMEOUT_MS = 20_000
  * Las respuestas llegan en streaming: [onDelta] recibe cada trozo de texto apenas se genera.
  */
 interface AiChatClient {
+    /** Modelos de chat disponibles en la cuenta. También sirve para probar si la clave funciona. */
     suspend fun listModels(): List<AiModel>
 
+    /**
+     * Envía la conversación y va entregando la respuesta a pedazos en [onDelta].
+     * Devuelve el texto completo al terminar.
+     */
     suspend fun stream(
         model: String,
         system: String,
@@ -54,6 +60,7 @@ interface AiChatClient {
  */
 private val clientCache = java.util.concurrent.ConcurrentHashMap<String, AiChatClient>()
 
+/** Devuelve el cliente de la IA elegida (reutiliza el mismo si ya existe con esa clave). */
 fun aiClientFor(provider: AiProvider, apiKey: String): AiChatClient =
     clientCache.getOrPut("${provider.name}:$apiKey") {
         when (provider) {
@@ -69,6 +76,10 @@ fun clearAiClients() = clientCache.clear()
 /** Las conversaciones solo envían los últimos mensajes: menos texto que leer = respuesta más rápida. */
 internal const val MAX_HISTORY_MESSAGES = 16
 
+/**
+ * Últimos mensajes para la IA, empezando siempre por uno del usuario
+ * (varias APIs fallan si la conversación empieza con la IA).
+ */
 internal fun List<ChatMessage>.recentForAi(): List<ChatMessage> =
     takeLast(MAX_HISTORY_MESSAGES).dropWhile { it.role != ChatMessage.Role.USER }
 
@@ -88,6 +99,7 @@ fun defaultModelFor(provider: AiProvider, models: List<AiModel>): AiModel? {
     return models.firstOrNull { it.id == id }
 }
 
+/** Palabras que indican un modelo de Gemini en prueba (sin capa gratis estable). */
 private val GEMINI_UNSTABLE_MARKERS = listOf("preview", "exp", "omni", "thinking", "latest", "tuning")
 
 /** Modelos Gemini estables (sin preview, experimental, ni variantes especiales). */
@@ -116,20 +128,27 @@ internal fun geminiFastThinking(model: String): JSONObject? {
 internal fun geminiVersion(id: String): Double =
     Regex("gemini-(\\d+(?:\\.\\d+)?)").find(id)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
 
+/** true si el mensaje lo escribió el usuario. */
 private fun ChatMessage.isUser() = role == ChatMessage.Role.USER
 
 // =====================================================
 // CLAUDE (SDK oficial de Anthropic)
 // =====================================================
 
+/** Cliente de Claude con el SDK oficial de Anthropic. */
 private class ClaudeChatClient(apiKey: String) : AiChatClient {
 
     private val client: AnthropicClient = AnthropicOkHttpClient.builder().apiKey(apiKey).build()
 
+    /** Modelos de Claude de la cuenta (el SDK pagina solo con autoPager). */
     override suspend fun listModels(): List<AiModel> = withContext(Dispatchers.IO) {
         claudeCall { client.models().list().autoPager().map { AiModel(it.id(), it.displayName()) } }
     }
 
+    /**
+     * Respuesta de Claude por streaming. Usa esfuerzo bajo (más rápido) y, en los modelos que
+     * lo aceptan, respaldos automáticos si un filtro rechaza la petición.
+     */
     override suspend fun stream(
         model: String,
         system: String,
@@ -191,6 +210,7 @@ private class ClaudeChatClient(apiKey: String) : AiChatClient {
     private fun supportsEffortAndFallbacks(model: String) =
         model.startsWith("claude-opus-5") || model.startsWith("claude-sonnet-5-5") || model.startsWith("claude-fable-5")
 
+    /** Traduce los errores del SDK de Anthropic a mensajes en español (clave inválida, sin saldo…). */
     private inline fun <T> claudeCall(block: () -> T): T =
         try {
             block()
@@ -228,6 +248,7 @@ private class ClaudeChatClient(apiKey: String) : AiChatClient {
 // GEMINI (API REST de Google AI Studio)
 // =====================================================
 
+/** Cliente de Gemini por REST (API de Google AI Studio). */
 private class GeminiChatClient(private val apiKey: String) : AiChatClient {
 
     // La clave va en un encabezado, nunca en la URL.
@@ -239,6 +260,7 @@ private class GeminiChatClient(private val apiKey: String) : AiChatClient {
     /** Respaldo que respondió hace poco (modelo, válido hasta). */
     @Volatile private var workingBackup: Pair<String, Long>? = null
 
+    /** Modelos de Gemini que sirven para conversar, ordenados: estables y nuevos primero. */
     override suspend fun listModels(): List<AiModel> = withContext(Dispatchers.IO) {
         val json = providerCall("Gemini") { HttpJson.request("$BASE/models?pageSize=200", headers = headers) }
         val models = json.optJSONArray("models") ?: JSONArray()
@@ -262,6 +284,10 @@ private class GeminiChatClient(private val apiKey: String) : AiChatClient {
             .also { cachedModels = it }
     }
 
+    /**
+     * Respuesta de Gemini por streaming. Si el modelo está saturado (503) y aún no llegó texto,
+     * prueba con otros modelos Flash de la cuenta y recuerda 10 minutos el que funcionó.
+     */
     override suspend fun stream(
         model: String,
         system: String,
@@ -394,10 +420,12 @@ private class GeminiChatClient(private val apiKey: String) : AiChatClient {
 // CHATGPT (API REST de OpenAI)
 // =====================================================
 
+/** Cliente de ChatGPT por REST (API de OpenAI). */
 private class OpenAiChatClient(apiKey: String) : AiChatClient {
 
     private val headers = mapOf("Authorization" to "Bearer $apiKey")
 
+    /** Modelos GPT y de razonamiento (o1, o3…) que funcionan con /chat/completions. */
     override suspend fun listModels(): List<AiModel> = withContext(Dispatchers.IO) {
         val json = providerCall("ChatGPT") { HttpJson.request("$BASE/models", headers = headers) }
         val data = json.optJSONArray("data") ?: JSONArray()
@@ -408,6 +436,10 @@ private class OpenAiChatClient(apiKey: String) : AiChatClient {
             .map { AiModel(it, it) }
     }
 
+    /**
+     * Respuesta de ChatGPT por streaming. A los modelos de razonamiento les pide pensar poco
+     * (reasoning_effort = low) para responder antes.
+     */
     override suspend fun stream(
         model: String,
         system: String,
@@ -462,11 +494,13 @@ private class OpenAiChatClient(apiKey: String) : AiChatClient {
 // HTTP + errores comunes
 // =====================================================
 
+/** Respuesta HTTP con error (4xx o 5xx). Guarda el código y el cuerpo para explicar qué pasó. */
 internal class HttpStatusException(val code: Int, val body: String) : IOException("HTTP $code")
 
 /** Pequeño cliente HTTP con JSON y streaming SSE (sin dependencias extra). */
 internal object HttpJson {
 
+    /** Petición que devuelve un objeto JSON. */
     fun request(
         url: String,
         method: String = "GET",
@@ -474,9 +508,11 @@ internal object HttpJson {
         body: JSONObject? = null
     ): JSONObject = JSONObject(requestText(url, method, headers, body?.toString()).ifBlank { "{}" })
 
+    /** Petición que devuelve una lista JSON (p. ej. los repos de GitHub). */
     fun requestArray(url: String, headers: Map<String, String> = emptyMap()): JSONArray =
         JSONArray(requestText(url, "GET", headers, null).ifBlank { "[]" })
 
+    /** Petición que devuelve el texto tal cual (archivos de un repo, diffs). */
     fun requestText(url: String, method: String, headers: Map<String, String>, body: String?): String {
         val connection = open(url, method, headers, body)
         try {
@@ -568,6 +604,10 @@ internal object HttpJson {
     }
 }
 
+/**
+ * Traduce errores HTTP de Gemini y ChatGPT a mensajes en español según el código
+ * (400 clave inválida, 429 límite de uso, 503 saturado…).
+ */
 private inline fun <T> providerCall(name: String, block: () -> T): T =
     try {
         block()

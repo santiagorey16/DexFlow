@@ -56,6 +56,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 
+/**
+ * Login "con estado": guarda lo que escribes (correo, contraseña, ver contraseña)
+ * valida que no esté vacío y abre el selector de Google.
+ * Le pasa todo a [LoginScreen], que solo dibuja (patrón state hoisting).
+ */
 @Composable
 fun StatefulLoginScreen(
     isLoading: Boolean = false,
@@ -158,6 +163,11 @@ fun launchGoogleSignIn(
 }
 
 
+/**
+ * Pantalla de inicio de sesión SIN estado: recibe los valores y avisa con lambdas.
+ * Así se puede ver en el @Preview sin ejecutar la app.
+ * Al abrirse pone el cursor en el campo de correo (LaunchedEffect + FocusRequester).
+ */
 @Composable
 fun LoginScreen(
     email: String,
@@ -301,6 +311,7 @@ private fun TaglinePill() {
     }
 }
 
+/** Separador "──── o continúa con ────" antes de los botones de GitHub y Google. */
 @Composable
 private fun OrContinueWithDivider() {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

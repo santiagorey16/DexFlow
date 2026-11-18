@@ -83,19 +83,23 @@ data class ProjectTask(
     fun totalMs(now: Long = System.currentTimeMillis()): Long =
         trackedMs + (timerStartedAt?.let { (now - it).coerceAtLeast(0) } ?: 0L)
 
+    /** Devuelve la tarea con otro estado. Si pasa a "Hecho", detiene antes el cronómetro. */
     fun withStatus(newStatus: TaskStatus, now: Long = System.currentTimeMillis()): ProjectTask {
         // Al terminar una tarea se detiene su cronómetro.
         val stopped = if (newStatus == TaskStatus.DONE) stopTimer(now) else this
         return stopped.copy(done = newStatus == TaskStatus.DONE, inProgress = newStatus == TaskStatus.IN_PROGRESS)
     }
 
+    /** Inicia el cronómetro: guarda solo CUÁNDO empezó (si ya corría, no cambia nada). */
     fun startTimer(now: Long = System.currentTimeMillis()): ProjectTask =
         if (timerStartedAt != null) this else copy(timerStartedAt = now, inProgress = true, done = false)
 
+    /** Detiene el cronómetro: suma el tiempo que corrió a [trackedMs] y borra el inicio. */
     fun stopTimer(now: Long = System.currentTimeMillis()): ProjectTask =
         if (timerStartedAt == null) this else copy(trackedMs = totalMs(now), timerStartedAt = null)
 }
 
+/** Columnas del Kanban. */
 enum class TaskStatus(val label: String) { TODO("Por hacer"), IN_PROGRESS("En curso"), DONE("Hecho") }
 
 /** "1 h 25 min", "12 min" o "0 min". */
@@ -112,6 +116,7 @@ fun formatDuration(ms: Long): String {
 val taskPhases: List<ProjectPhase>
     get() = projectPhases.take(4)
 
+/** Cliente guardado por el usuario. */
 data class Client(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
@@ -122,6 +127,7 @@ data class Client(
     val createdAt: Long = System.currentTimeMillis()
 )
 
+/** Una acción de la actividad reciente ("Proyecto creado: …"). */
 data class ActivityEntry(
     val id: String = UUID.randomUUID().toString(),
     val type: ActivityType,
@@ -129,8 +135,10 @@ data class ActivityEntry(
     val timestamp: Long = System.currentTimeMillis()
 )
 
+/** Tipo de acción (define el icono en el Dashboard). */
 enum class ActivityType { PROJECT, CLIENT, PROGRESS, COMPLETED }
 
+/** Fase de un proyecto y el rango de avance que le corresponde. */
 data class ProjectPhase(
     val name: String,
     val description: String,
@@ -138,6 +146,7 @@ data class ProjectPhase(
     val to: Int
 )
 
+/** Las 5 fases, en orden. */
 val projectPhases = listOf(
     ProjectPhase("Planificación", "Levantamiento de requisitos y alcance", 0, 20),
     ProjectPhase("Diseño", "Arquitectura, UI/UX y prototipos", 20, 40),
@@ -146,6 +155,7 @@ val projectPhases = listOf(
     ProjectPhase("Completado", "Entregado y en mantenimiento", 100, 100)
 )
 
+/** Convierte un avance (0–100) en la posición de su fase dentro de [projectPhases]. */
 fun currentPhaseIndex(progress: Int): Int =
     when {
         progress >= 100 -> 4
@@ -163,27 +173,34 @@ fun initialProgressFor(startingPoint: Int): Int =
         else -> 0 // Análisis
     }
 
+/** Español para nombres de meses y días. */
 private val spanishLocale = Locale.forLanguageTag("es-ES")
 
+/** Formato corto de fecha: "05 dic 2026". */
 private val shortDateFormatter: DateTimeFormatter =
     DateTimeFormatter.ofPattern("dd MMM yyyy", spanishLocale)
 
+/** Milisegundos (como los da el DatePicker, en UTC) → fecha sin hora. */
 fun millisToLocalDate(millis: Long): LocalDate =
     Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate()
 
+/** Fecha de entrega en texto, o "Sin fecha". */
 fun formatDeliveryDate(millis: Long?): String =
     millis?.let { millisToLocalDate(it).format(shortDateFormatter) } ?: "Sin fecha"
 
+/** Fecha de creación en texto (en la zona horaria del teléfono). */
 fun formatCreatedDate(millis: Long): String =
     Instant.ofEpochMilli(millis).atZone(java.time.ZoneId.systemDefault())
         .toLocalDate().format(shortDateFormatter)
 
+/** Fecha de hoy en texto largo: "Martes, 18 de noviembre". */
 fun formatTodayLong(): String {
     val text = LocalDate.now()
         .format(DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", spanishLocale))
     return text.replaceFirstChar { it.titlecase(spanishLocale) }
 }
 
+/** Hace cuánto pasó algo: "Justo ahora", "Hace 5 min", "Ayer"… */
 fun formatRelativeTime(timestamp: Long): String {
     val diffMinutes = (System.currentTimeMillis() - timestamp) / 60_000
     return when {

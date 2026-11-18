@@ -22,6 +22,7 @@ class ChatHistoryStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("devflow_chats", Context.MODE_PRIVATE)
     private val firestore: FirebaseFirestore by lazy { FirebaseFirestore.getInstance() }
 
+    /** Lee el historial: de Firestore con cuenta o del teléfono sin ella. Si falla, devuelve una lista vacía. */
     suspend fun load(account: String, uid: String?, chatId: String): List<ChatMessage> =
         safely("cargar", emptyList()) {
             if (uid != null) {
@@ -32,6 +33,7 @@ class ChatHistoryStore(context: Context) {
             }
         }
 
+    /** Guarda los últimos [MAX_MESSAGES] mensajes del chat. */
     suspend fun save(account: String, uid: String?, chatId: String, messages: List<ChatMessage>) {
         val recent = messages.takeLast(MAX_MESSAGES)
         safely("guardar", Unit) {
@@ -50,6 +52,7 @@ class ChatHistoryStore(context: Context) {
         }
     }
 
+    /** Borra el historial del chat ("Nuevo chat"). */
     suspend fun clear(account: String, uid: String?, chatId: String) {
         safely("borrar", Unit) {
             if (uid != null) chatDoc(uid, chatId).delete().await()
@@ -71,11 +74,14 @@ class ChatHistoryStore(context: Context) {
             fallback
         }
 
+    /** Documento users/{uid}/chats/{chatId} en Firestore. */
     private fun chatDoc(uid: String, chatId: String) =
         firestore.collection("users").document(uid).collection("chats").document(chatId)
 
+    /** Clave del historial guardado en el teléfono. */
     private fun localKey(account: String, chatId: String) = "chat_${account}_$chatId"
 
+    /** JSON guardado en el teléfono → mensajes. */
     private fun parseLocal(raw: String): List<ChatMessage> {
         val array = JSONArray(raw)
         return (0 until array.length()).mapNotNull { i ->
@@ -85,6 +91,7 @@ class ChatHistoryStore(context: Context) {
         }
     }
 
+    /** Mapa leído de Firestore → mensaje (null si está incompleto). */
     private fun Any?.toChatMessage(): ChatMessage? {
         val map = this as? Map<*, *> ?: return null
         val role = ChatMessage.Role.entries.firstOrNull { it.name == map["role"] } ?: return null

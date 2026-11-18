@@ -9,6 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.edit
 
+/** Nombre del archivo de SharedPreferences donde se guardan los ajustes. */
 private const val SETTINGS_PREFS = "devflow_settings"
 
 /**
@@ -37,6 +38,7 @@ fun rememberBooleanPreference(key: String, default: Boolean): MutableState<Boole
     }
 }
 
+/** Igual que [rememberBooleanPreference], pero para textos. */
 @Composable
 fun rememberStringPreference(key: String, default: String): MutableState<String> {
     val prefs = settingsPrefs()
@@ -49,16 +51,25 @@ fun rememberStringPreference(key: String, default: String): MutableState<String>
     }
 }
 
+/**
+ * Devuelve el estado compartido de esa clave o lo crea la primera vez.
+ * synchronized evita que dos hilos creen dos estados para la misma clave.
+ */
 @Suppress("UNCHECKED_CAST")
 private fun <T> sharedState(key: String, create: () -> MutableState<T>): MutableState<T> =
     synchronized(sharedStates) { sharedStates.getOrPut(key) { create() } as MutableState<T> }
 
+/** SharedPreferences de los ajustes (se busca una sola vez gracias a remember). */
 @Composable
 private fun settingsPrefs(): SharedPreferences {
     val context = LocalContext.current.applicationContext
     return remember(context) { context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE) }
 }
 
+/**
+ * Estado de Compose que además se guarda en el teléfono:
+ * al cambiar [value] actualiza el estado (la pantalla se redibuja) y llama a [persist] para guardarlo.
+ */
 private class PersistedState<T>(
     private val state: MutableState<T>,
     private val persist: (T) -> Unit
@@ -71,6 +82,7 @@ private class PersistedState<T>(
             persist(newValue)
         }
 
+    /** Permite escribir `val (valor, cambiar) = estado`, igual que con mutableStateOf. */
     override fun component1(): T = value
     override fun component2(): (T) -> Unit = { value = it }
 }

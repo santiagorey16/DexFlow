@@ -214,10 +214,12 @@ fun ProjectOverviewScreen(
     }
 }
 
+/** Claves de los ajustes que comparten varias pantallas (se leen con rememberBooleanPreference). */
 internal const val PREF_STRICT_QUALITY = "strict_quality"
 internal const val PREF_COACH_LIVE = "coach_live"
 internal const val PREF_QUALITY_ALERTS = "cicd_alerts"
 
+/** Fila "etiqueta: valor" del resumen del proyecto (se puede tocar si tiene [onClick]). */
 @Composable
 private fun InfoLine(label: String, value: String, valueColor: Color = Color.White, onClick: (() -> Unit)? = null) {
     Row(verticalAlignment = Alignment.Top) {
@@ -229,6 +231,10 @@ private fun InfoLine(label: String, value: String, valueColor: Color = Color.Whi
     }
 }
 
+/**
+ * Avance manual con un Slider, para proyectos sin tareas.
+ * remember(project.id, project.progress): el Slider se reinicia si cambia el proyecto o su avance.
+ */
 @Composable
 private fun ManualProgressCard(project: Project, onSave: (Int) -> Unit) {
     var progress by remember(project.id, project.progress) { mutableFloatStateOf(project.progress.toFloat()) }

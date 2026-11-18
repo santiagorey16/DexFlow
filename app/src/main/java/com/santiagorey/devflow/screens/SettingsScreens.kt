@@ -60,8 +60,10 @@ import com.santiagorey.devflow.auth.PROVIDER_GOOGLE
 import com.santiagorey.devflow.auth.PROVIDER_PASSWORD
 import com.santiagorey.devflow.ui.theme.DevFlowTheme
 
+/** XP necesaria para subir de nivel. */
 private const val XP_PER_LEVEL = 500
 
+/** Nombre de cada nivel según la XP acumulada. */
 private val levelTitles = listOf(
     "Junior en formación",
     "Desarrollador Junior",
@@ -70,6 +72,11 @@ private val levelTitles = listOf(
     "Desarrollador Senior"
 )
 
+/**
+ * Pestaña Ajustes: perfil y nivel (XP), logros, cuenta, integraciones (Google, GitHub, IA),
+ * preferencias del coach y las alertas, privacidad y eliminar la cuenta.
+ * Los interruptores usan rememberBooleanPreference: se guardan y todas las pantallas los ven al instante.
+ */
 @Composable
 fun SettingsScreens(
     currentUser: FirebaseUser? = null,
@@ -511,6 +518,7 @@ fun SettingsScreens(
     }
 }
 
+/** Fila de una acción de la cuenta (cambiar nombre, contraseña…). */
 @Composable
 private fun AccountActionRow(
     iconRes: Int,
@@ -538,6 +546,7 @@ private fun AccountActionRow(
     }
 }
 
+/** Título de una sección de Ajustes. */
 @Composable
 private fun SectionHeader(title: String) {
     Text(
@@ -546,6 +555,7 @@ private fun SectionHeader(title: String) {
     )
 }
 
+/** Logro: se ve encendido si está desbloqueado y apagado si no. */
 @Composable
 private fun BadgeItem(modifier: Modifier, iconRes: Int, title: String, subtitle: String, unlocked: Boolean) {
     Box(
@@ -565,6 +575,7 @@ private fun BadgeItem(modifier: Modifier, iconRes: Int, title: String, subtitle:
     }
 }
 
+/** Fila con un interruptor (Switch) para activar o desactivar una opción. */
 @Composable
 private fun ToggleSettingRow(iconRes: Int, title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(
@@ -588,6 +599,7 @@ private fun ToggleSettingRow(iconRes: Int, title: String, subtitle: String, chec
     }
 }
 
+/** Fila de una integración (Google, GitHub…): conectar, o desconectar pidiendo confirmación. */
 @Composable
 private fun IntegrationRow(
     iconRes: Int,

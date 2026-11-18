@@ -30,6 +30,7 @@ import com.santiagorey.devflow.R
 
 // Componentes, colores y utilidades compartidos por todas las pantallas de DevFlow.
 
+/** Paleta de colores fija de DevFlow (tema oscuro). Todas las pantallas usan estos colores. */
 internal object DevFlowColors {
 
     val Background = Color(0xFF0B0E14)
@@ -64,6 +65,7 @@ internal fun FirebaseUser?.friendlyName(): String =
         ?: this?.email?.substringBefore('@')
         ?: "Developer"
 
+/** Texto amigable para los días que faltan a una entrega: "hoy", "mañana", "en 5 días", "vencido". */
 internal fun daysLabel(days: Long?): String =
     when {
         days == null -> "sin fecha"
@@ -93,6 +95,7 @@ fun DevFlowLogo(
     )
 }
 
+/** Tarjeta con un número destacado (título, valor grande y subtítulo). */
 @Composable
 fun MetricCard(
     title: String,
@@ -143,6 +146,7 @@ fun MetricCard(
     }
 }
 
+/** Buscador con lupa. El texto lo guarda quien lo usa (state hoisting). */
 @Composable
 fun SearchSection(
     searchQuery: String,
@@ -177,6 +181,7 @@ fun SearchSection(
     )
 }
 
+/** Etiqueta pequeña de color con un punto, p. ej. "● En curso". */
 @Composable
 fun StatusChip(
     text: String,
@@ -196,6 +201,7 @@ fun StatusChip(
     }
 }
 
+/** Tarjeta para cuando no hay nada que mostrar, con un botón de acción opcional. */
 @Composable
 fun EmptyStateCard(
     title: String,
@@ -278,6 +284,7 @@ fun BackTopBar(
     }
 }
 
+/** Campo de texto con etiqueta flotante y el estilo de DevFlow (formularios de proyecto y cliente). */
 @Composable
 fun DevFlowTextField(
     value: String,
@@ -322,6 +329,10 @@ internal fun devFlowTextFieldColors(filled: Boolean = false) =
         cursorColor = DevFlowColors.Cyan
     )
 
+/**
+ * Tarjeta base de DevFlow: fondo oscuro, borde y esquinas redondeadas.
+ * [content] es un slot: quien la usa pone lo que quiera adentro.
+ */
 @Composable
 fun DevFlowCard(
     modifier: Modifier = Modifier,
@@ -349,6 +360,7 @@ fun DevFlowCard(
     }
 }
 
+/** Etiqueta pequeña en mayúsculas y letra monoespaciada. */
 @Composable
 fun SmallLabel(
     text: String,
@@ -365,6 +377,10 @@ fun SmallLabel(
     )
 }
 
+/**
+ * Barra de navegación inferior con las 5 pestañas.
+ * [selectedTab] marca la activa y [onTabSelected] avisa cuál se tocó (MainActivity.navigateToTab).
+ */
 @Composable
 fun DevFlowBottomBar(
     selectedTab: Int,

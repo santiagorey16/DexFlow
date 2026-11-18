@@ -13,6 +13,7 @@ data class DevFlowAlert(
     val projectId: String? = null,
     val url: String? = null
 ) {
+    /** HIGH = rojo (vencido, CI fallando). MEDIUM = amarillo (entrega cercana). */
     enum class Severity { HIGH, MEDIUM }
 }
 

@@ -10,12 +10,14 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
+/** Esquema de colores oscuro de Material (cuando no hay color dinámico). */
 private val DarkColorScheme = darkColorScheme(
     primary = Purple80,
     secondary = PurpleGrey80,
     tertiary = Pink80
 )
 
+/** Esquema de colores claro de Material. */
 private val LightColorScheme = lightColorScheme(
     primary = Purple40,
     secondary = PurpleGrey40,
@@ -32,6 +34,10 @@ private val LightColorScheme = lightColorScheme(
     */
 )
 
+/**
+ * Tema de Material que envuelve toda la app (en MainActivity).
+ * En Android 12+ usa los colores del fondo de pantalla (dynamicColor).
+ */
 @Composable
 fun DevFlowTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
